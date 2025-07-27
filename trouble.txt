@@ -1,0 +1,466 @@
+# 🛠️ Agentic Teaching System 故障排除記錄
+
+## 📅 記錄時間：2025-07-27
+
+---
+
+## ❌ 問題 1：Kafka 容器啟動失敗
+
+### 🔍 錯誤症狀
+```
+org.apache.kafka.common.KafkaException: Class io.confluent.metrics.reporter.ConfluentMetricsReporter cannot be found
+Caused by: java.lang.ClassNotFoundException: io.confluent.metrics.reporter.ConfluentMetricsReporter
+```
+
+### 📋 錯誤詳情
+- **發生時間**：系統啟動時
+- **影響範圍**：Kafka 容器無法正常啟動
+- **錯誤原因**：Docker Compose 配置中包含了 Confluent Platform 商業版的指標報告器配置，但使用的是開源 Apache Kafka 映像
+
+### 🔧 解決方案
+移除 docker-compose.yml 和 docker-compose.ollama.yml 中的 Confluent 特定配置：
+
+**移除的配置項目：**
+```yaml
+# 移除這些環境變數
+KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+KAFKA_CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:29092
+KAFKA_CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+KAFKA_CONFLUENT_METRICS_ENABLE: 'true'
+KAFKA_CONFLUENT_SUPPORT_CUSTOMER_ID: anonymous
+```
+
+**修復後的 Kafka 配置：**
+```yaml
+kafka:
+  image: confluentinc/cp-kafka:7.4.0
+  hostname: kafka
+  container_name: kafka
+  depends_on:
+    - zookeeper
+  ports:
+    - "9092:9092"
+    - "9101:9101"
+  environment:
+    KAFKA_BROKER_ID: 1
+    KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+    KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  healthcheck:
+    test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:29092 --list"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+```
+
+### ✅ 修復步驟
+1. 更新 `docker-compose.yml` - 移除 Confluent 配置
+2. 更新 `docker-compose.ollama.yml` - 移除 Confluent 配置
+3. 改進健康檢查命令：使用 `kafka-topics --list` 而非 `kafka-broker-api-versions`
+4. 創建 `fix-kafka.bat` 修復腳本
+
+### 📝 修復腳本內容 (fix-kafka.bat)
+```batch
+@echo off
+echo 🔧 修復 Kafka 配置問題
+echo 💡 問題：Confluent 指標報告器未找到
+echo ✅ 解決方案：已移除 Confluent 特定配置，使用純 Apache Kafka
+
+echo 🛑 停止所有容器...
+docker-compose -f docker-compose.ollama.yml down
+docker-compose down
+
+echo 🧹 清理舊的容器和網路...
+docker system prune -f
+
+echo 🔨 重新啟動修復後的系統...
+docker-compose -f docker-compose.ollama.yml up --build -d zookeeper kafka ollama
+```
+
+---
+
+## ❌ 問題 2：Windows 命令相容性問題（之前遇到的）
+
+### 🔍 錯誤症狀
+```
+ping 不是內部或外部命令
+find 不是內部或外部命令
+findstr 不是內部或外部命令
+```
+
+### 📋 錯誤詳情
+- **發生時間**：執行 start-ollama.bat 時
+- **影響範圍**：啟動腳本無法正常運行
+- **錯誤原因**：某些 Windows 系統缺少標準命令或命令路徑配置問題
+
+### 🔧 解決方案
+創建多個相容性版本的啟動腳本：
+
+1. **start-powershell.ps1**（主要解決方案）
+   - 使用 PowerShell 原生命令
+   - `Start-Sleep` 代替 `ping` 延遲
+   - `docker exec` 代替 `find/findstr`
+
+2. **start-compatible.bat**（備用解決方案）
+   - 使用 `timeout` 代替 `ping`
+   - 使用 PowerShell 回退方案
+
+3. **WINDOWS_COMPATIBILITY.md**（詳細說明文檔）
+
+---
+
+## ❌ 問題 3：Docker 健康檢查不可靠
+
+### 🔍 錯誤症狀
+- 健康檢查命令 `kafka-broker-api-versions` 可能不存在
+- 容器顯示不健康狀態
+
+### 🔧 解決方案
+更改健康檢查命令為更可靠的選項：
+```yaml
+# 原來的（不可靠）
+test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+
+# 修復後的（可靠）
+test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:29092 --list"]
+```
+
+---
+
+## ❌ 問題 4：agentic-app 容器無法啟動
+
+### 🔍 錯誤症狀
+```
+CONTAINER ID   IMAGE                             STATUS
+a270e082c18e   agentic_system-agentic-app        Created
+89ee189af35f   ollama/ollama:latest              Up 52 seconds (unhealthy)
+```
+
+### 📋 錯誤詳情
+- **發生時間**：Docker Compose 啟動後
+- **症狀**：agentic-app 容器狀態顯示 "Created" 而不是 "Up"
+- **根本原因**：
+  1. Ollama 容器健康檢查失敗（使用了不存在的 curl 命令）
+  2. agentic-app 設定為等待 ollama 健康才啟動
+  3. 因為 ollama 永遠不健康，所以 agentic-app 永遠不啟動
+
+### � 解決方案
+
+#### 1. 修復 Ollama 健康檢查
+```yaml
+# 原來的（錯誤）
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+
+# 修復後的（正確）
+healthcheck:
+  test: ["CMD-SHELL", "ollama list || exit 1"]
+```
+
+#### 2. 調整依賴配置
+```yaml
+# 原來的（等待健康）
+depends_on:
+  ollama:
+    condition: service_healthy
+
+# 修復後的（等待啟動）
+depends_on:
+  ollama:
+    condition: service_started
+```
+
+### 📝 修復腳本 (fix-startup.bat)
+```batch
+@echo off
+echo 🔧 修復 Ollama 健康檢查和啟動問題
+
+echo 🛑 停止所有容器...
+docker-compose -f docker-compose.ollama.yml down
+
+echo 🧹 移除舊的容器...
+docker container rm -f agentic-app ollama kafka zookeeper 2>nul
+
+echo 🔨 重新構建並啟動系統...
+docker-compose -f docker-compose.ollama.yml up --build -d
+
+echo ⏳ 等待服務啟動 (30 秒)...
+timeout /t 30 /nobreak > nul
+
+echo 📋 檢查容器狀態...
+docker ps -a
+```
+
+### ✅ 驗證步驟
+1. 執行 `fix-startup.bat`
+2. 檢查 `docker ps` 確認所有容器都是 "Up" 狀態
+3. 執行 `docker exec ollama ollama list` 確認 Ollama 正常
+4. 執行 `docker logs agentic-app` 檢查應用程式日誌
+
+---
+
+## ❌ 問題 5：LLM 引擎初始化時序問題
+
+### 🔍 錯誤症狀
+```
+Exception: No available LLM engines could be created
+File "/app/core/dynamic_assign.py", line 17, in __init__
+    self.llm_engine = LLMEngineFactory.create_for_agent(
+```
+
+### 📋 錯誤詳情
+- **發生時間**：應用程式啟動時，嘗試初始化 dynamic_assigner
+- **根本原因**：應用程式啟動太快，Ollama 服務雖然容器顯示健康，但 API 還沒完全準備好
+- **症狀**：agentic-app 容器進入重啟循環
+
+### 🔧 解決方案
+
+#### 1. 添加 Ollama 引擎重試邏輯
+```python
+# 在 ollama_engine.py 的 _initialize_client() 方法中
+max_retries = 5
+retry_delay = 2
+
+for attempt in range(max_retries):
+    try:
+        response = requests.get(f"{self.base_url}/api/tags", timeout=10)
+        # ... 連接成功邏輯
+        return
+    except requests.RequestException as e:
+        if attempt < max_retries - 1:
+            time.sleep(retry_delay)
+            retry_delay *= 1.5  # 指數退避
+```
+
+#### 2. 添加應用程式啟動延遲
+```python
+# 在 main.py 的 start_system() 方法中
+logger.info("Waiting for infrastructure services to be ready...")
+time.sleep(10)  # 給 Kafka 和 Ollama 時間完全初始化
+```
+
+#### 3. 更新 .env 配置
+```env
+# 確保容器間正確的 URL
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=llama2  # 使用已下載的模型
+```
+
+### 📝 修復腳本 (fix-llm-connection.bat)
+```batch
+echo 🔧 修復 LLM 引擎連接問題
+docker-compose -f docker-compose.ollama.yml stop agentic-app
+timeout /t 15 /nobreak > nul  # 等待服務穩定
+docker exec kafka wget -qO- http://ollama:11434/api/tags  # 測試連接
+docker-compose -f docker-compose.ollama.yml up -d agentic-app
+```
+
+### ✅ 驗證步驟
+1. 執行 `fix-llm-connection.bat`
+2. 檢查 `docker logs agentic-app` 應該看到成功的連接訊息
+3. 執行 `interactive-test.bat` 進行功能測試
+
+---
+
+### 1. **Confluent vs Apache Kafka**
+- Confluent Platform 包含商業功能和指標
+- 開源 Apache Kafka 不包含這些功能
+- 配置時要確保映像和配置匹配
+
+### 2. **Windows 環境差異**
+- 不同 Windows 版本可能缺少標準命令
+- 需要提供多種相容性方案
+- PowerShell 通常是最可靠的選擇
+
+### 3. **Docker 健康檢查**
+- 命令必須在容器內部可用
+- 簡單的命令比複雜的更可靠
+- 適當的超時和重試設置很重要
+
+---
+
+## 🔧 修復工具
+
+### 創建的修復腳本
+1. **fix-kafka.bat** - 修復 Kafka 配置問題
+2. **start-powershell.ps1** - Windows 相容性解決方案
+3. **start-compatible.bat** - 備用相容性方案
+4. **quick-test.bat** - 快速健康檢查
+5. **interactive-test.bat** - 互動式測試工具
+
+### 測試工具
+1. **TESTING_GUIDE.md** - 完整測試指南
+2. **quick-test.sh** - Linux/macOS 測試腳本
+3. **WINDOWS_COMPATIBILITY.md** - Windows 相容性文檔
+
+---
+
+## ✅ 當前狀態
+
+### 修復完成項目
+- ✅ Kafka 配置問題已解決
+- ✅ Windows 相容性問題已解決
+- ✅ 健康檢查已改進
+- ✅ 多平台啟動腳本已完成
+- ✅ 完整的測試套件已建立
+
+### 系統現在支援
+- ✅ Ollama 本地 LLM 引擎
+- ✅ Gemini 雲端 API
+- ✅ Docker 容器化部署
+- ✅ 多平台相容性（Windows/Linux/macOS）
+- ✅ 完整的故障排除工具
+
+---
+
+## 🚀 下次啟動建議
+
+### 推薦啟動順序
+1. 執行 `fix-kafka.bat`（如果遇到 Kafka 問題）
+2. 使用 `start-powershell.ps1`（Windows 首選）
+3. 或使用 `start-ollama.bat`（修復後版本）
+4. 執行 `quick-test.bat` 驗證系統
+5. 使用 `interactive-test.bat` 進行功能測試
+
+### 故障排除流程
+1. 檢查 Docker 是否運行
+2. 檢查容器狀態：`docker ps`
+3. 檢查容器日誌：`docker-compose logs`
+4. 執行健康檢查：`quick-test.bat`
+5. 查看此故障排除文檔
+
+---
+
+## 📞 支援資源
+
+### 文檔參考
+- `TESTING_GUIDE.md` - 詳細測試步驟
+- `DOCKER_OLLAMA_SUPPORT.md` - Ollama 支援說明
+- `WINDOWS_COMPATIBILITY.md` - Windows 相容性指南
+- `trouble.txt` - 本故障排除記錄（當前文檔）
+
+### 快速命令參考
+```bash
+# 檢查系統狀態
+docker ps
+docker-compose logs
+
+# 重新啟動系統
+fix-kafka.bat
+start-powershell.ps1
+
+# 測試系統
+quick-test.bat
+interactive-test.bat
+
+# 清理系統
+docker-compose down
+docker system prune
+```
+
+---
+
+## ✅ 問題 6：最終成功集成 - Ollama 引擎完全正常運行
+
+### 🎉 成功症狀
+```
+✅ 所有容器運行正常：agentic-app, ollama, kafka, zookeeper
+✅ Ollama 模型載入成功：llama2:latest (3.8GB)
+✅ LLM 引擎創建成功：OllamaEngine 連接到 http://ollama:11434
+✅ AI 對話測試通過：正常回應中英文問題
+✅ 動態分配正常：自動路由到合適的老師
+✅ Kafka 消息流正常：成功發送和接收消息
+```
+
+### 📋 最終修復詳情
+- **時間**：2025-07-27 下午
+- **解決的核心問題**：OllamaEngine 構造函數中屬性初始化順序
+- **根本原因**：`self.base_url` 在 `super().__init__()` 之前沒有設置，導致 `_initialize_client()` 找不到屬性
+
+### 🔧 關鍵修復
+```python
+# 修復前（錯誤）
+def __init__(self, model_name: str = None, api_key: str = None, base_url: str = None):
+    super().__init__(model_name, api_key)  # 這裡會調用 _initialize_client()
+    self.base_url = base_url.rstrip('/')   # 但 base_url 還沒設置！
+
+# 修復後（正確）  
+def __init__(self, model_name: str = None, api_key: str = None, base_url: str = None):
+    self.base_url = base_url.rstrip('/')   # 先設置屬性
+    # ... 其他屬性初始化
+    super().__init__(model_name, api_key)  # 最後調用父類構造函數
+```
+
+### 🔧 其他改進
+1. **增強驗證邏輯**：添加重試機制和詳細日誌
+2. **Docker 依賴**：agentic-app 等待 ollama 健康狀態
+3. **健康檢查**：使用 `ollama list` 命令驗證服務
+4. **腳本清理**：從 13 個腳本簡化為 4 個核心腳本
+
+### 📊 最終測試結果
+```
+🧪 System Health Check Results:
+✅ Docker containers: All running
+✅ LLM Engine: OllamaEngine with llama2 model  
+✅ Network connectivity: ollama:11434 accessible
+✅ AI Response time: ~9-10 seconds (acceptable for local AI)
+✅ Dynamic assignment: Working for CN/EN routing
+✅ Kafka topics: english_teacher, chinese_teacher, result
+✅ Interactive mode: Fully functional
+```
+
+### 🎯 驗證的功能
+- ✅ **English Teacher**: "What is the difference between 'their', 'there', and 'they're'?"
+- ✅ **Chinese Teacher**: "什麼是成語？請給我幾個例子。"
+- ✅ **Auto-routing**: 系統自動判斷語言並分配老師
+- ✅ **Kafka messaging**: 消息正確路由和處理
+- ✅ **Container health**: 所有服務穩定運行
+- ✅ **Model management**: 自動下載和管理 llama2 模型
+
+### 📝 最終系統配置
+```yaml
+# docker-compose.ollama.yml - 工作配置
+agentic-app:
+  depends_on:
+    kafka:
+      condition: service_healthy
+    ollama:
+      condition: service_healthy  # 關鍵：等待健康狀態
+  environment:
+    - OLLAMA_BASE_URL=http://ollama:11434  # 容器網絡地址
+    - DEFAULT_LLM_ENGINE=ollama
+    - OLLAMA_MODEL=llama2
+
+ollama:
+  healthcheck:
+    test: ["CMD-SHELL", "ollama list || exit 1"]  # 可靠的健康檢查
+```
+
+### 🚀 用戶使用指令
+```bash
+# 1. 啟動系統（Windows）
+.\start-ollama.bat
+
+# 2. 健康檢查
+.\quick-test.bat
+
+# 3. 互動測試  
+.\interactive-simple.bat
+
+# 4. 查看狀態
+docker ps
+docker logs agentic-app -f
+```
+
+### 📚 創建的文檔
+- ✅ **README.md** - 更新完整的測試和使用指南
+- ✅ **QUICK_START.md** - 快速上手指南
+- ✅ **interactive-simple.bat** - 簡化版互動測試
+- ✅ **trouble.txt** - 本故障排除記錄（當前文檔）
+
+---
+
+*最後更新：2025-07-27*
+*系統版本：Agentic Teaching System with Ollama Support*
