@@ -9,8 +9,8 @@ from core.logger import logger
 
 class WebSearchTool(BaseTool):
     """
-    Web search tool for retrieving information from the internet
-    Uses a simple search API (can be extended to use Google, Bing, etc.)
+    WebSearchTool class for retrieving information from the internet.
+    Uses a simple search API (can be extended to use Google, Bing, etc.).
     """
     
     def __init__(self):
@@ -22,14 +22,19 @@ class WebSearchTool(BaseTool):
     
     def execute(self, **kwargs) -> Dict[str, Any]:
         """
-        Execute web search
+        Execute web search.
         
         Args:
-            query: Search query string
-            max_results: Maximum number of results (default: 5)
+            **kwargs: Keyword arguments containing:
+                query (str): Search query string.
+                max_results (int, optional): Maximum number of results. Defaults to 5.
             
         Returns:
-            Dictionary containing search results
+            Dict[str, Any]: Dictionary containing search results.
+
+        Raises:
+            Exception:
+                An error occurred while executing the web search.
         """
         try:
             query = kwargs.get('query', '')
@@ -61,14 +66,14 @@ class WebSearchTool(BaseTool):
     
     def _simulate_search(self, query: str, max_results: int) -> list:
         """
-        Simulate web search results (placeholder implementation)
+        Simulate web search results (placeholder implementation).
         
         Args:
-            query: Search query
-            max_results: Maximum results to return
+            query (str): Search query.
+            max_results (int): Maximum results to return.
             
         Returns:
-            List of simulated search results
+            list: List of simulated search results.
         """
         # This is a simulation - in production you would use real search APIs
         simulated_results = [
@@ -87,15 +92,18 @@ class WebSearchTool(BaseTool):
     
     def _real_search_example(self, query: str, max_results: int) -> list:
         """
-        Example of how to implement real web search
-        This method is not used in the simulation but shows the pattern
+        Example of how to implement real web search.
+        This method is not used in the simulation but shows the pattern.
         
         Args:
-            query: Search query
-            max_results: Maximum results
+            query (str): Search query.
+            max_results (int): Maximum results.
             
         Returns:
-            Search results from real API
+            list: List of real search results.
+
+        Raises:
+            Exception: An error occurred while performing real search.
         """
         try:
             # Example using a hypothetical search API

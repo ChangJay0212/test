@@ -1,6 +1,7 @@
 """
 Chinese teacher agent implementation
 """
+import time
 from typing import Dict, Any
 from agents.base_agent import BaseAgent
 from llm_engines.factory import LLMEngineFactory
@@ -12,7 +13,7 @@ from core.logger import logger
 
 class ChineseTeacherAgent(BaseAgent):
     """
-    Chinese teacher agent specialized in Chinese language and literature
+    ChineseTeacherAgent class specialized in Chinese language and literature.
     """
     
     def __init__(self, agent_uuid: str = "chinese_teacher_001", engine_type: str = None):
@@ -40,13 +41,16 @@ class ChineseTeacherAgent(BaseAgent):
     
     def process_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process message from student and provide Chinese language assistance
+        Process message from student and provide Chinese language assistance.
         
         Args:
-            message: Input message containing student query
+            message (Dict[str, Any]): Input message containing student query.
             
         Returns:
-            Response dictionary with teaching assistance
+            Dict[str, Any]: Response dictionary with teaching assistance.
+
+        Raises:
+            Exception: An error occurred while processing the message.
         """
         try:
             # Extract message content
@@ -66,27 +70,87 @@ class ChineseTeacherAgent(BaseAgent):
             system_prompt = self.create_chinese_teacher_prompt()
             full_prompt = f"{system_prompt}\n\nStudent Question: {user_message}\n\nResponse:"
             
-            # Generate response
-            response = self.generate_response(full_prompt, use_tools=True)
+            # Generate response with intelligent tool usage
+            start_time = time.time()
+            response_data = self.generate_response(full_prompt, use_tools=True)
+            response_time = time.time() - start_time
             
-            # Check if web search might be helpful for cultural or historical topics
-            if self._should_use_web_search(user_message):
-                search_result = self.execute_tool("web_search", {"query": user_message})
-                if search_result.get("success"):
-                    search_info = self._format_search_results(search_result)
-                    response += f"\n\n補充資料 (Additional Information):\n{search_info}"
+            # Get cost information from LLM engine
+            cost_stats = self.llm_engine.get_cost_statistics()
+            
+            # Log cost information
+            try:
+                from core.cost_monitor import cost_monitor
+                request_id = message.get('request_id', f"req_{int(time.time())}")
+                
+                cost_monitor.log_request(
+                    agent_uuid=self.agent_uuid,
+                    agent_type=self.agent_type,
+                    request_id=request_id,
+                    producer_uuid=producer_uuid,
+                    cost_info={
+                        "input_tokens": cost_stats.get("last_request_input_tokens", 0),
+                        "output_tokens": cost_stats.get("last_request_output_tokens", 0),
+                        "input_cost": cost_stats.get("last_request_input_cost", 0.0),
+                        "output_cost": cost_stats.get("last_request_output_cost", 0.0),
+                        "total_cost": cost_stats.get("last_request_total_cost", 0.0)
+                    },
+                    response_time=response_time,
+                    model_name=self.llm_engine.model_name,
+                    success=True
+                )
+            except Exception as e:
+                logger.error(f"Error logging cost for Chinese teacher: {e}")
             
             return {
                 "success": True,
-                "response": response,
+                "response": response_data["content"],
                 "agent_type": self.agent_type,
                 "agent_uuid": self.agent_uuid,
                 "producer_uuid": producer_uuid,
-                "tools_used": ["web_search"] if self._should_use_web_search(user_message) else []
+                "request_id": message.get('request_id', ''),
+                "tools_used": response_data["tools_used"],
+                "tool_results": response_data["tool_results"],
+                "response_time": response_time,
+                "cost_info": {
+                    "input_tokens": cost_stats.get("last_request_input_tokens", 0),
+                    "output_tokens": cost_stats.get("last_request_output_tokens", 0),
+                    "total_tokens": cost_stats.get("last_request_input_tokens", 0) + cost_stats.get("last_request_output_tokens", 0),
+                    "input_cost": cost_stats.get("last_request_input_cost", 0.0),
+                    "output_cost": cost_stats.get("last_request_output_cost", 0.0),
+                    "total_cost": cost_stats.get("last_request_total_cost", 0.0),
+                    "model_name": self.llm_engine.model_name
+                },
+                "performance_metrics": {
+                    "response_time": response_time,
+                    "tokens_per_second": (cost_stats.get("last_request_input_tokens", 0) + cost_stats.get("last_request_output_tokens", 0)) / response_time if response_time > 0 else 0,
+                    "tools_count": len(response_data["tools_used"])
+                }
             }
             
         except Exception as e:
             logger.error(f"Error processing message in Chinese teacher: {e}")
+            
+            # Log failed request cost
+            try:
+                from core.cost_monitor import cost_monitor
+                request_id = message.get('request_id', f"req_{int(time.time())}")
+                producer_uuid = message.get('producer_uuid', '')
+                
+                cost_monitor.log_request(
+                    agent_uuid=self.agent_uuid,
+                    agent_type=self.agent_type,
+                    request_id=request_id,
+                    producer_uuid=producer_uuid,
+                    cost_info={},
+                    response_time=0.0,
+                    model_name="gemini-1.5-flash",
+                    success=False,
+                    error_message=str(e)
+                )
+            except Exception as cost_error:
+                logger.error(f"Error logging failed request cost: {cost_error}")
+            
             return {
                 "success": False,
                 "error": f"Processing failed: {str(e)}",
@@ -128,46 +192,3 @@ When helping students:
 5. Encourage continued exploration of Chinese culture and literature
 
 Be patient, thorough, and inspiring in your teaching approach. Help students develop both language skills and cultural understanding."""
-    
-    def _should_use_web_search(self, message: str) -> bool:
-        """
-        Determine if web search would be helpful for the query
-        
-        Args:
-            message: Student message
-            
-        Returns:
-            True if web search should be used
-        """
-        # Use web search for historical context, cultural topics, or specific literary works
-        search_keywords = [
-            "歷史", "文化", "背景", "作者", "詩人", "朝代", "典故", "成語來源",
-            "history", "culture", "author", "poet", "dynasty", "classical", 
-            "contemporary chinese", "taiwan literature", "cultural significance"
-        ]
-        
-        message_lower = message.lower()
-        return any(keyword in message_lower for keyword in search_keywords)
-    
-    def _format_search_results(self, search_result: Dict[str, Any]) -> str:
-        """
-        Format search results for educational presentation
-        
-        Args:
-            search_result: Search results from web search tool
-            
-        Returns:
-            Formatted search information
-        """
-        if not search_result.get("success") or not search_result.get("results"):
-            return "我查找了相關資料，但目前未能找到合適的補充資訊。(I searched for additional information but couldn't find relevant results at the moment.)"
-        
-        results = search_result["results"][:3]  # Limit to top 3 results
-        formatted_results = []
-        
-        for i, result in enumerate(results, 1):
-            title = result.get("title", "Unknown Title")
-            snippet = result.get("snippet", "No description available")
-            formatted_results.append(f"{i}. {title}\n   {snippet}")
-        
-        return "\n\n".join(formatted_results)

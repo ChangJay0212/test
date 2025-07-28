@@ -11,7 +11,7 @@ import config.settings as settings
 
 class OllamaEngine(BaseLLMEngine):
     """
-    Ollama LLM engine implementation for local models
+    OllamaEngine class for Ollama LLM engine implementation for local models.
     """
     
     def __init__(self, model_name: str = None, api_key: str = None, base_url: str = None):
@@ -30,6 +30,13 @@ class OllamaEngine(BaseLLMEngine):
         self.total_requests = 0
         self.total_cost = 0.0  # Always 0 for local models
         
+        # Last request tracking
+        self.last_request_input_tokens = 0
+        self.last_request_output_tokens = 0
+        self.last_request_input_cost = 0.0
+        self.last_request_output_cost = 0.0
+        self.last_request_total_cost = 0.0
+        
         # No actual cost for local models, but we can estimate computational cost
         self.compute_cost_per_1k = 0.0  # Free for local deployment
         
@@ -37,7 +44,15 @@ class OllamaEngine(BaseLLMEngine):
         super().__init__(model_name, api_key)
         
     def _initialize_client(self):
-        """Initialize Ollama client by checking server availability with retry logic"""
+        """
+        Initialize Ollama client by checking server availability with retry logic.
+
+        Raises:
+            ConnectionError:
+                If unable to connect to Ollama server after retries.
+            Exception:
+                An error occurred while initializing the client.
+        """
         max_retries = 5
         retry_delay = 2
         
@@ -73,7 +88,13 @@ class OllamaEngine(BaseLLMEngine):
                     raise ConnectionError(f"Ollama server unavailable after {max_retries} attempts: {e}")
     
     def _pull_model(self):
-        """Pull model if not available locally"""
+        """
+        Pull model if not available locally.
+
+        Raises:
+            Exception:
+                An error occurred while pulling the model.
+        """
         try:
             logger.info(f"Pulling model '{self.model_name}' from Ollama...")
             response = requests.post(
@@ -92,14 +113,18 @@ class OllamaEngine(BaseLLMEngine):
     
     def generate_response(self, prompt: str, **kwargs) -> str:
         """
-        Generate response using Ollama with cost tracking
+        Generate response using Ollama with cost tracking.
         
         Args:
-            prompt: Input prompt
-            **kwargs: Additional generation parameters
+            prompt (str): Input prompt.
+            **kwargs: Additional generation parameters.
             
         Returns:
-            Generated text response
+            str: Generated text response.
+
+        Raises:
+            Exception:
+                An error occurred while generating response.
         """
         start_time = time.time()
         
@@ -237,6 +262,13 @@ Please provide a helpful response. If you need to use any tools, mention which t
             output_cost = 0.0
             total_cost = 0.0
             
+            # Store last request data
+            self.last_request_input_tokens = input_tokens
+            self.last_request_output_tokens = output_tokens
+            self.last_request_input_cost = input_cost
+            self.last_request_output_cost = output_cost
+            self.last_request_total_cost = total_cost
+            
             # Update totals
             self.total_input_tokens += input_tokens
             self.total_output_tokens += output_tokens
@@ -252,6 +284,13 @@ Please provide a helpful response. If you need to use any tools, mention which t
             
         except Exception as e:
             logger.error(f"Error calculating request usage: {e}")
+            # Reset last request data on error
+            self.last_request_input_tokens = 0
+            self.last_request_output_tokens = 0
+            self.last_request_input_cost = 0.0
+            self.last_request_output_cost = 0.0
+            self.last_request_total_cost = 0.0
+            
             return {
                 "input_tokens": 0,
                 "output_tokens": 0,
@@ -278,7 +317,13 @@ Please provide a helpful response. If you need to use any tools, mention which t
             "compute_cost_per_1k": self.compute_cost_per_1k,
             "model_name": self.model_name,
             "engine_type": "ollama",
-            "deployment_type": "local"
+            "deployment_type": "local",
+            # Last request data
+            "last_request_input_tokens": self.last_request_input_tokens,
+            "last_request_output_tokens": self.last_request_output_tokens,
+            "last_request_input_cost": self.last_request_input_cost,
+            "last_request_output_cost": self.last_request_output_cost,
+            "last_request_total_cost": self.last_request_total_cost
         }
     
     def reset_cost_tracking(self):
@@ -287,6 +332,14 @@ Please provide a helpful response. If you need to use any tools, mention which t
         self.total_output_tokens = 0
         self.total_requests = 0
         self.total_cost = 0.0
+        
+        # Reset last request data
+        self.last_request_input_tokens = 0
+        self.last_request_output_tokens = 0
+        self.last_request_input_cost = 0.0
+        self.last_request_output_cost = 0.0
+        self.last_request_total_cost = 0.0
+        
         logger.info("Ollama usage tracking counters reset")
     
     def validate_api_key(self) -> bool:

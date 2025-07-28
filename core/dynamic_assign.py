@@ -9,8 +9,8 @@ from llm_engines.factory import LLMEngineFactory
 
 class DynamicAssigner:
     """
-    Dynamic assignment system for routing messages to appropriate agents
-    when no specific agent is requested
+    DynamicAssigner class for routing messages to appropriate agents
+    when no specific agent is requested.
     """
     
     def __init__(self, engine_type: str = None):
@@ -21,13 +21,17 @@ class DynamicAssigner:
         
     def assign_agent(self, message: str) -> Optional[str]:
         """
-        Dynamically assign an agent based on message content
+        Dynamically assign an agent based on message content.
         
         Args:
-            message: User message to analyze
+            message (str): User message to analyze.
             
         Returns:
-            Topic name for the assigned agent, or None if assignment fails
+            Optional[str]: Topic name for the assigned agent, or None if assignment fails.
+
+        Raises:
+            Exception:
+                An error occurred while assigning agent.
         """
         try:
             # Get available agents and their descriptions

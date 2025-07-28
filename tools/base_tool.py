@@ -7,17 +7,18 @@ from typing import Dict, Any
 
 class BaseTool(ABC):
     """
-    Abstract base class for agent tools
-    Provides interface for creating new tools
+    BaseTool class as abstract base class for agent tools.
+    Provides interface for creating new tools.
     """
     
     def __init__(self, name: str, description: str):
         """
-        Initialize tool
+        Initialize tool.
         
         Args:
-            name: Tool name
-            description: Tool description
+            name (str): Tool name.
+            description (str): Tool description.
+
         """
         self.name = name
         self.description = description
@@ -25,32 +26,36 @@ class BaseTool(ABC):
     @abstractmethod
     def execute(self, **kwargs) -> Dict[str, Any]:
         """
-        Execute the tool with given parameters
+        Execute the tool with given parameters.
         
         Args:
-            **kwargs: Tool parameters
+            **kwargs: Tool parameters.
             
         Returns:
-            Dictionary containing execution result
+            Dict[str, Any]: Dictionary containing execution result.
+
+        Raises:
+            Exception:
+                An error occurred while executing the tool.
         """
         pass
     
     @abstractmethod
     def get_parameters_schema(self) -> Dict[str, Any]:
         """
-        Get tool parameters schema for validation
+        Get tool parameters schema for validation.
         
         Returns:
-            JSON schema for tool parameters
+            Dict[str, Any]: JSON schema for tool parameters.
         """
         pass
     
     def get_tool_definition(self) -> Dict[str, Any]:
         """
-        Get tool definition for LLM integration
+        Get tool definition for LLM integration.
         
         Returns:
-            Tool definition dictionary
+            Dict[str, Any]: Tool definition dictionary.
         """
         return {
             "name": self.name,
@@ -60,13 +65,17 @@ class BaseTool(ABC):
     
     def validate_parameters(self, parameters: Dict[str, Any]) -> bool:
         """
-        Validate parameters against schema
+        Validate parameters against schema.
         
         Args:
-            parameters: Parameters to validate
+            parameters (Dict[str, Any]): Parameters to validate.
             
         Returns:
-            True if parameters are valid, False otherwise
+            bool: True if parameters are valid, False otherwise.
+
+        Raises:
+            Exception:
+                An error occurred while validating parameters.
         """
         try:
             schema = self.get_parameters_schema()

@@ -31,11 +31,13 @@ services:
       timeout: 5s
       retries: 5
 
-  agentic-app:
+  # Core infrastructure (agents and monitoring)
+  agentic-infrastructure:
     build: .
-    container_name: agentic-app
+    container_name: agentic-infrastructure
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - GEMINI_API_KEY=${GEMINI_API_KEY}
@@ -47,5 +49,27 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./logs:/app/logs
+    command: ["python", "main.py"]
+    restart: unless-stopped
+
+  # Interactive service (continuous client simulation with command interface)
+  agentic-interactive:
+    build: .
+    container_name: agentic-interactive
+    depends_on:
+      - agentic-infrastructure
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEFAULT_LLM_ENGINE=${DEFAULT_LLM_ENGINE:-gemini}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama2}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-60}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./logs:/app/logs
+    command: ["python", "interactive_service.py"]
     stdin_open: true
     tty: true
+    restart: unless-stopped

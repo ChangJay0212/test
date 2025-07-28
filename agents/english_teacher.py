@@ -14,7 +14,7 @@ from core.cost_monitor import cost_monitor
 
 class EnglishTeacherAgent(BaseAgent):
     """
-    English teacher agent specialized in English language instruction
+    EnglishTeacherAgent class specialized in English language instruction.
     """
     
     def __init__(self, agent_uuid: str = "english_teacher_001", engine_type: str = None):
@@ -42,13 +42,17 @@ class EnglishTeacherAgent(BaseAgent):
     
     def process_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process message from student and provide English language assistance with cost tracking
+        Process message from student and provide English language assistance with cost tracking.
         
         Args:
-            message: Input message containing student query
+            message (Dict[str, Any]): Input message containing student query.
             
         Returns:
-            Response dictionary with teaching assistance
+            Dict[str, Any]: Response with English teaching assistance.
+
+        Raises:
+            Exception:
+                An error occurred while processing the message.
         """
         start_time = time.time()
         
@@ -71,35 +75,28 @@ class EnglishTeacherAgent(BaseAgent):
             system_prompt = self.create_english_teacher_prompt()
             full_prompt = f"{system_prompt}\n\nStudent Question: {user_message}\n\nResponse:"
             
-            # Generate response
-            response = self.generate_response(full_prompt, use_tools=True)
+            # Generate response with intelligent tool usage
+            response_data = self.generate_response(full_prompt, use_tools=True)
             
             # Get cost information from LLM engine
             cost_stats = self.llm_engine.get_cost_statistics()
-            
-            # Check if web search might be helpful for complex topics
-            tools_used = []
-            if self._should_use_web_search(user_message):
-                search_result = self.execute_tool("web_search", {"query": user_message})
-                if search_result.get("success"):
-                    search_info = self._format_search_results(search_result)
-                    response += f"\n\nAdditional Information:\n{search_info}"
-                    tools_used.append("web_search")
             
             # Calculate response time
             end_time = time.time()
             response_time = end_time - start_time
             
-            # Log cost information
+            # Log cost information with actual data from LLM engine
             cost_monitor.log_request(
                 agent_uuid=self.agent_uuid,
                 agent_type=self.agent_type,
                 request_id=request_id,
                 producer_uuid=producer_uuid,
                 cost_info={
-                    "input_tokens": 0,  # Will be updated by LLM engine
-                    "output_tokens": 0,
-                    "total_cost": 0.0
+                    "input_tokens": cost_stats.get("last_request_input_tokens", 0),
+                    "output_tokens": cost_stats.get("last_request_output_tokens", 0),
+                    "input_cost": cost_stats.get("last_request_input_cost", 0.0),
+                    "output_cost": cost_stats.get("last_request_output_cost", 0.0),
+                    "total_cost": cost_stats.get("last_request_total_cost", 0.0)
                 },
                 response_time=response_time,
                 model_name=self.llm_engine.model_name,
@@ -108,16 +105,27 @@ class EnglishTeacherAgent(BaseAgent):
             
             return {
                 "success": True,
-                "response": response,
+                "response": response_data["content"],
                 "agent_type": self.agent_type,
                 "agent_uuid": self.agent_uuid,
                 "producer_uuid": producer_uuid,
                 "request_id": request_id,
-                "tools_used": tools_used,
+                "tools_used": response_data["tools_used"],
+                "tool_results": response_data["tool_results"],
                 "response_time": response_time,
                 "cost_info": {
-                    "total_cost": cost_stats.get("total_cost", 0.0),
-                    "total_tokens": cost_stats.get("total_tokens", 0)
+                    "input_tokens": cost_stats.get("last_request_input_tokens", 0),
+                    "output_tokens": cost_stats.get("last_request_output_tokens", 0),
+                    "total_tokens": cost_stats.get("last_request_input_tokens", 0) + cost_stats.get("last_request_output_tokens", 0),
+                    "input_cost": cost_stats.get("last_request_input_cost", 0.0),
+                    "output_cost": cost_stats.get("last_request_output_cost", 0.0),
+                    "total_cost": cost_stats.get("last_request_total_cost", 0.0),
+                    "model_name": self.llm_engine.model_name
+                },
+                "performance_metrics": {
+                    "response_time": response_time,
+                    "tokens_per_second": (cost_stats.get("last_request_input_tokens", 0) + cost_stats.get("last_request_output_tokens", 0)) / response_time if response_time > 0 else 0,
+                    "tools_count": len(response_data["tools_used"])
                 }
             }
             
@@ -182,46 +190,3 @@ When helping students:
 5. Be encouraging and supportive
 
 Remember to be patient, encouraging, and thorough in your explanations."""
-    
-    def _should_use_web_search(self, message: str) -> bool:
-        """
-        Determine if web search would be helpful for the query
-        
-        Args:
-            message: Student message
-            
-        Returns:
-            True if web search should be used
-        """
-        # Use web search for complex topics, current events, or specific literary works
-        search_keywords = [
-            "current events", "news", "recent", "latest", "modern literature",
-            "contemporary", "famous author", "book analysis", "poem analysis",
-            "historical context", "cultural significance", "etymology"
-        ]
-        
-        message_lower = message.lower()
-        return any(keyword in message_lower for keyword in search_keywords)
-    
-    def _format_search_results(self, search_result: Dict[str, Any]) -> str:
-        """
-        Format search results for educational presentation
-        
-        Args:
-            search_result: Search results from web search tool
-            
-        Returns:
-            Formatted search information
-        """
-        if not search_result.get("success") or not search_result.get("results"):
-            return "I searched for additional information but couldn't find relevant results at the moment."
-        
-        results = search_result["results"][:3]  # Limit to top 3 results
-        formatted_results = []
-        
-        for i, result in enumerate(results, 1):
-            title = result.get("title", "Unknown Title")
-            snippet = result.get("snippet", "No description available")
-            formatted_results.append(f"{i}. {title}\n   {snippet}")
-        
-        return "\n\n".join(formatted_results)

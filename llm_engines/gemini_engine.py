@@ -11,7 +11,7 @@ import time
 
 class GeminiEngine(BaseLLMEngine):
     """
-    Google Gemini LLM engine implementation
+    GeminiEngine class for Google Gemini LLM engine implementation.
     """
     
     def __init__(self, model_name: str = None, api_key: str = None):
@@ -28,13 +28,28 @@ class GeminiEngine(BaseLLMEngine):
         self.total_requests = 0
         self.total_cost = 0.0
         
+        # Last request cost tracking
+        self.last_request_input_tokens = 0
+        self.last_request_output_tokens = 0
+        self.last_request_input_cost = 0.0
+        self.last_request_output_cost = 0.0
+        self.last_request_total_cost = 0.0
+        
         # Gemini pricing (as of 2024, in USD per 1K tokens)
         # These should be updated based on current pricing
         self.input_cost_per_1k = 0.0005  # $0.0005 per 1K input tokens
         self.output_cost_per_1k = 0.0015  # $0.0015 per 1K output tokens
         
     def _initialize_client(self):
-        """Initialize Gemini client"""
+        """
+        Initialize Gemini client.
+
+        Raises:
+            ValueError:
+                If Gemini API key is required but not provided.
+            Exception:
+                An error occurred while initializing the client.
+        """
         try:
             if not self.api_key:
                 raise ValueError("Gemini API key is required")
@@ -48,14 +63,18 @@ class GeminiEngine(BaseLLMEngine):
     
     def generate_response(self, prompt: str, **kwargs) -> str:
         """
-        Generate response using Gemini with cost tracking
+        Generate response using Gemini with cost tracking.
         
         Args:
-            prompt: Input prompt
-            **kwargs: Additional generation parameters
+            prompt (str): Input prompt.
+            **kwargs: Additional generation parameters.
             
         Returns:
-            Generated text response
+            str: Generated text response.
+
+        Raises:
+            Exception:
+                An error occurred while generating response.
         """
         start_time = time.time()
         
@@ -178,6 +197,13 @@ Please provide a helpful response. If you need to use any tools, mention which t
             output_cost = (output_tokens / 1000) * self.output_cost_per_1k
             total_cost = input_cost + output_cost
             
+            # Store last request data
+            self.last_request_input_tokens = input_tokens
+            self.last_request_output_tokens = output_tokens
+            self.last_request_input_cost = input_cost
+            self.last_request_output_cost = output_cost
+            self.last_request_total_cost = total_cost
+            
             # Update totals
             self.total_input_tokens += input_tokens
             self.total_output_tokens += output_tokens
@@ -193,6 +219,13 @@ Please provide a helpful response. If you need to use any tools, mention which t
             
         except Exception as e:
             logger.error(f"Error calculating request cost: {e}")
+            # Reset last request data on error
+            self.last_request_input_tokens = 0
+            self.last_request_output_tokens = 0
+            self.last_request_input_cost = 0.0
+            self.last_request_output_cost = 0.0
+            self.last_request_total_cost = 0.0
+            
             return {
                 "input_tokens": 0,
                 "output_tokens": 0,
@@ -218,7 +251,13 @@ Please provide a helpful response. If you need to use any tools, mention which t
             "average_tokens_per_request": (self.total_input_tokens + self.total_output_tokens) / max(self.total_requests, 1),
             "input_cost_per_1k": self.input_cost_per_1k,
             "output_cost_per_1k": self.output_cost_per_1k,
-            "model_name": self.model_name
+            "model_name": self.model_name,
+            # Last request data
+            "last_request_input_tokens": self.last_request_input_tokens,
+            "last_request_output_tokens": self.last_request_output_tokens,
+            "last_request_input_cost": self.last_request_input_cost,
+            "last_request_output_cost": self.last_request_output_cost,
+            "last_request_total_cost": self.last_request_total_cost
         }
     
     def reset_cost_tracking(self):
@@ -227,6 +266,14 @@ Please provide a helpful response. If you need to use any tools, mention which t
         self.total_output_tokens = 0
         self.total_requests = 0
         self.total_cost = 0.0
+        
+        # Reset last request data
+        self.last_request_input_tokens = 0
+        self.last_request_output_tokens = 0
+        self.last_request_input_cost = 0.0
+        self.last_request_output_cost = 0.0
+        self.last_request_total_cost = 0.0
+        
         logger.info("Cost tracking counters reset")
 
     def validate_api_key(self) -> bool:

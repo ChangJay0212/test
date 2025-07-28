@@ -11,7 +11,7 @@ import config.settings as settings
 
 class KafkaClient:
     """
-    Kafka client wrapper for simplified producer/consumer operations
+    KafkaClient class wrapper for simplified producer/consumer operations.
     """
     
     def __init__(self):
@@ -21,7 +21,13 @@ class KafkaClient:
         self._initialize_admin_client()
     
     def _initialize_admin_client(self):
-        """Initialize Kafka admin client"""
+        """
+        Initialize Kafka admin client.
+
+        Raises:
+            Exception:
+                An error occurred while initializing the admin client.
+        """
         try:
             self.admin_client = KafkaAdminClient(
                 bootstrap_servers=self.bootstrap_servers,
@@ -33,10 +39,14 @@ class KafkaClient:
     
     def get_producer(self) -> KafkaProducer:
         """
-        Get or create Kafka producer
+        Get or create Kafka producer.
         
         Returns:
-            KafkaProducer instance
+            KafkaProducer: KafkaProducer instance.
+
+        Raises:
+            Exception:
+                An error occurred while creating the producer.
         """
         if self.producer is None:
             try:

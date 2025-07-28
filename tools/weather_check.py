@@ -8,7 +8,7 @@ from core.logger import logger
 
 class WeatherCheck(BaseTool):
     """
-    Weather tool for getting current weather information
+    WeatherCheck class for getting current weather information.
     """
     
     def __init__(self):
@@ -19,14 +19,19 @@ class WeatherCheck(BaseTool):
     
     def execute(self, **kwargs) -> Dict[str, Any]:
         """
-        Get weather information for a location
+        Get weather information for a location.
         
         Args:
-            location: City name or location to get weather for
-            units: Temperature units (metric, imperial, kelvin)
+            **kwargs: Keyword arguments containing:
+                location (str): City name or location to get weather for.
+                units (str, optional): Temperature units (metric, imperial, kelvin). Defaults to 'metric'.
             
         Returns:
-            Dictionary with weather information
+            Dict[str, Any]: Dictionary with weather information.
+
+        Raises:
+            Exception:
+                An error occurred while getting weather information.
         """
         try:
             location = kwargs.get('location', 'Unknown')

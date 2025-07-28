@@ -14,7 +14,7 @@ import config.settings as settings
 
 class StudentProducer:
     """
-    Producer that simulates student requests to the teaching system
+    StudentProducer class that simulates student requests to the teaching system.
     """
     
     def __init__(self, producer_uuid: str = None):
@@ -27,7 +27,11 @@ class StudentProducer:
         logger.info(f"Student producer initialized: {self.producer_uuid}")
     
     def start_result_listener(self):
-        """Start listening for results from agents"""
+        """
+        Start listening for results from agents.
+
+        
+        """
         if self.is_listening:
             logger.warning("Result listener already running")
             return
@@ -172,17 +176,13 @@ class StudentProducer:
                 if success:
                     response_text = message.get('response', '')
                     logger.info(f"Received response from {agent_type}: {response_text[:100]}...")
-                    print(f"\n=== Response from {agent_type} ===")
-                    print(f"Question: {self.pending_requests[request_id]['message']}")
-                    print(f"Answer: {response_text}")
-                    print("=" * 50)
+                    
+                    # Store response data without displaying (Interactive Service will handle display)
+                    # This avoids duplicate output
                 else:
                     error = message.get('error', 'Unknown error')
                     logger.error(f"Error response from {agent_type}: {error}")
-                    print(f"\n=== Error from {agent_type} ===")
-                    print(f"Question: {self.pending_requests[request_id]['message']}")
-                    print(f"Error: {error}")
-                    print("=" * 50)
+                    # Store error without displaying
             
         except Exception as e:
             logger.error(f"Error handling result message: {e}")
@@ -194,7 +194,62 @@ class StudentProducer:
         Returns:
             Dictionary of pending requests
         """
-        return self.pending_requests.copy()
+        return self.pending_requests
+    
+    def get_last_completed_request(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the most recently completed request with full response details.
+        
+        Returns:
+            Dict containing request details and response, or None if no completed requests
+        """
+        completed_requests = [
+            req for req in self.pending_requests.values()
+            if req.get('status') == 'completed' and 'response' in req
+        ]
+        
+        if not completed_requests:
+            return None
+        
+        # Return the most recent completed request
+        latest_request = max(completed_requests, key=lambda x: x.get('timestamp', 0))
+        return latest_request
+    
+    def get_request_details(self, request_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get details for a specific request.
+        
+        Args:
+            request_id: The request ID to look up
+            
+        Returns:
+            Dict containing request details and response, or None if not found
+        """
+        if request_id in self.pending_requests:
+            return self.pending_requests[request_id]
+        return None
+    
+    def wait_for_response(self, request_id: str, timeout: float = 30.0) -> Optional[Dict[str, Any]]:
+        """
+        Wait for a specific request to complete and return the response.
+        
+        Args:
+            request_id: The request ID to wait for
+            timeout: Maximum time to wait in seconds
+            
+        Returns:
+            Response message or None if timeout
+        """
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            if request_id in self.pending_requests:
+                request = self.pending_requests[request_id]
+                if request.get('status') == 'completed' and 'response' in request:
+                    return request['response']
+            time.sleep(0.1)  # Short sleep to avoid busy waiting
+        
+        return None  # Timeout.copy()
     
     def send_sample_questions(self):
         """Send some sample questions for testing"""

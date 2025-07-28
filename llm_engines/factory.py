@@ -12,7 +12,7 @@ import config.settings as settings
 
 class LLMEngineFactory:
     """
-    Factory class for creating LLM engine instances
+    LLMEngineFactory class for creating LLM engine instances.
     """
     
     # Available engine types
@@ -24,14 +24,18 @@ class LLMEngineFactory:
     @classmethod
     def create_engine(cls, engine_type: str = None, **kwargs) -> BaseLLMEngine:
         """
-        Create an LLM engine instance based on type
+        Create an LLM engine instance based on type.
         
         Args:
-            engine_type: Type of engine ('gemini', 'ollama')
-            **kwargs: Additional parameters for engine initialization
+            engine_type (str, optional): Type of engine ('gemini', 'ollama'). Defaults to None.
+            **kwargs: Additional parameters for engine initialization.
             
         Returns:
-            Initialized LLM engine instance
+            BaseLLMEngine: Initialized LLM engine instance.
+
+        Raises:
+            Exception:
+                An error occurred while creating the engine.
         """
         # Default engine selection
         if engine_type is None:
@@ -68,13 +72,17 @@ class LLMEngineFactory:
     @classmethod
     def _create_gemini_engine(cls, **kwargs) -> GeminiEngine:
         """
-        Create Gemini engine with configuration
+        Create Gemini engine with configuration.
         
         Args:
-            **kwargs: Override parameters
+            **kwargs: Override parameters.
             
         Returns:
-            GeminiEngine instance
+            GeminiEngine: GeminiEngine instance.
+
+        Raises:
+            ValueError:
+                If Gemini API key is required but not provided.
         """
         model_name = kwargs.get('model_name', getattr(settings, 'GEMINI_MODEL', 'gemini-pro'))
         api_key = kwargs.get('api_key', getattr(settings, 'GEMINI_API_KEY', None))
@@ -89,13 +97,17 @@ class LLMEngineFactory:
     @classmethod
     def _create_ollama_engine(cls, **kwargs) -> OllamaEngine:
         """
-        Create Ollama engine with configuration
+        Create Ollama engine with configuration.
         
         Args:
-            **kwargs: Override parameters
+            **kwargs: Override parameters.
             
         Returns:
-            OllamaEngine instance
+            OllamaEngine: OllamaEngine instance.
+
+        Raises:
+            Exception:
+                An error occurred while creating the Ollama engine.
         """
         model_name = kwargs.get('model_name', getattr(settings, 'OLLAMA_MODEL', 'llama2'))
         base_url = kwargs.get('base_url', getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434'))
@@ -105,12 +117,13 @@ class LLMEngineFactory:
         return engine
     
     @classmethod
+    @classmethod
     def get_available_engines(cls) -> Dict[str, Dict[str, Any]]:
         """
-        Get information about available engines
+        Get information about available engines.
         
         Returns:
-            Dictionary with engine information
+            Dict[str, Dict[str, Any]]: Dictionary with engine information.
         """
         engines_info = {}
         
@@ -150,15 +163,20 @@ class LLMEngineFactory:
         return engines_info
     
     @classmethod
+    @classmethod
     def validate_engine_config(cls, engine_type: str) -> Dict[str, Any]:
         """
-        Validate configuration for a specific engine type
+        Validate configuration for a specific engine type.
         
         Args:
-            engine_type: Type of engine to validate
+            engine_type (str): Type of engine to validate.
             
         Returns:
-            Dictionary with validation results
+            Dict[str, Any]: Dictionary with validation results.
+
+        Raises:
+            Exception:
+                An error occurred while validating engine configuration.
         """
         engine_type = engine_type.lower()
         

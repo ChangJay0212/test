@@ -9,7 +9,7 @@ from core.logger import logger
 
 class Calculator(BaseTool):
     """
-    Calculator tool for performing mathematical operations
+    Calculator class for performing mathematical operations.
     """
     
     def __init__(self):
@@ -20,13 +20,18 @@ class Calculator(BaseTool):
     
     def execute(self, **kwargs) -> Dict[str, Any]:
         """
-        Execute mathematical calculation
+        Execute mathematical calculation.
         
         Args:
-            expression: Mathematical expression to evaluate
+            **kwargs: Keyword arguments containing:
+                expression (str): Mathematical expression to evaluate.
             
         Returns:
-            Dictionary with calculation result
+            Dict[str, Any]: Dictionary with calculation result.
+
+        Raises:
+            Exception:
+                An error occurred while executing the calculation.
         """
         try:
             expression = kwargs.get('expression', '')
@@ -86,10 +91,10 @@ class Calculator(BaseTool):
     
     def get_parameters_schema(self) -> Dict[str, Any]:
         """
-        Get tool parameters schema for validation
+        Get tool parameters schema for validation.
         
         Returns:
-            JSON schema for tool parameters
+            Dict[str, Any]: JSON schema for tool parameters.
         """
         return {
             "type": "object",

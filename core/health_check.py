@@ -12,7 +12,7 @@ import config.settings as settings
 
 class HealthChecker:
     """
-    Health checker for monitoring system components
+    HealthChecker class for monitoring system components.
     """
     
     def __init__(self):
@@ -22,7 +22,9 @@ class HealthChecker:
         self.agent_statuses: Dict[str, str] = {}
         
     def start_monitoring(self):
-        """Start health monitoring in a separate thread"""
+        """
+        Start health monitoring in a separate thread.
+        """
         if self.is_running:
             logger.warning("Health monitoring already running")
             return
@@ -33,14 +35,22 @@ class HealthChecker:
         logger.info("Health monitoring started")
     
     def stop_monitoring(self):
-        """Stop health monitoring"""
+        """
+        Stop health monitoring.
+        """
         self.is_running = False
         if self.health_thread:
             self.health_thread.join(timeout=5)
         logger.info("Health monitoring stopped")
     
     def _monitoring_loop(self):
-        """Main monitoring loop"""
+        """
+        Main monitoring loop.
+
+        Raises:
+            Exception:
+                An error occurred during monitoring.
+        """
         while self.is_running:
             try:
                 # Check Kafka health

@@ -3,10 +3,10 @@ Consumer manager for managing agent consumers
 """
 import time
 import threading
-from typing import Dict
+from typing import Dict, Any
+from core.logger import logger
 from core.kafka_client import kafka_client
 from core.registry import agent_registry
-from core.logger import logger
 from agents.english_teacher import EnglishTeacherAgent
 from agents.chinese_teacher import ChineseTeacherAgent
 import config.settings as settings
@@ -14,7 +14,7 @@ import config.settings as settings
 
 class AgentConsumer:
     """
-    Consumer wrapper for individual agents
+    AgentConsumer class as consumer wrapper for individual agents.
     """
     
     def __init__(self, agent, topic: str):
@@ -26,7 +26,9 @@ class AgentConsumer:
         self.message_count = 0
         
     def start_consuming(self):
-        """Start consuming messages for this agent"""
+        """
+        Start consuming messages for this agent.
+        """
         if self.is_running:
             logger.warning(f"Consumer for {self.agent.agent_type} already running")
             return
@@ -37,7 +39,9 @@ class AgentConsumer:
         logger.info(f"Started consumer for {self.agent.agent_type} on topic {self.topic}")
     
     def stop_consuming(self):
-        """Stop consuming messages"""
+        """
+        Stop consuming messages.
+        """
         self.is_running = False
         if self.consumer_thread:
             self.consumer_thread.join(timeout=5)
@@ -46,7 +50,13 @@ class AgentConsumer:
         logger.info(f"Stopped consumer for {self.agent.agent_type}")
     
     def _consume_loop(self):
-        """Main consumption loop"""
+        """
+        Main consumption loop.
+
+        Raises:
+            Exception:
+                An error occurred while consuming messages.
+        """
         try:
             # Create Kafka consumer
             self.consumer = kafka_client.get_consumer(
@@ -78,10 +88,13 @@ class AgentConsumer:
     
     def _process_message(self, message: Dict):
         """
-        Process individual message
+        Process individual message.
         
         Args:
-            message: Message from Kafka
+            message (Dict): Message from Kafka.
+
+        Raises:
+            Exception: An error occurred while processing the message.
         """
         try:
             self.message_count += 1
@@ -120,7 +133,7 @@ class AgentConsumer:
 
 class ConsumerManager:
     """
-    Manager for all agent consumers
+    ConsumerManager class for managing all agent consumers.
     """
     
     def __init__(self):
@@ -128,7 +141,12 @@ class ConsumerManager:
         self.is_running = False
         
     def initialize_agents(self):
-        """Initialize and register all agent consumers"""
+        """
+        Initialize and register all agent consumers.
+
+        Raises:
+            Exception: An error occurred while initializing agents.
+        """
         try:
             # Create agent instances
             agents = [
@@ -154,7 +172,12 @@ class ConsumerManager:
             raise
     
     def start_all_consumers(self):
-        """Start all agent consumers"""
+        """
+        Start all agent consumers.
+
+        Raises:
+            Exception: An error occurred while starting consumers.
+        """
         if self.is_running:
             logger.warning("Consumers already running")
             return
@@ -176,7 +199,10 @@ class ConsumerManager:
             raise
     
     def stop_all_consumers(self):
-        """Stop all agent consumers"""
+        """
+        Stop all agent consumers.
+ 
+        """
         self.is_running = False
         
         for consumer in self.consumers.values():
@@ -186,10 +212,10 @@ class ConsumerManager:
     
     def get_consumer_status(self) -> Dict[str, Dict]:
         """
-        Get status of all consumers
+        Get status of all consumers.
         
         Returns:
-            Dictionary containing consumer status information
+            Dict[str, Dict]: Dictionary containing consumer status information.
         """
         status = {}
         for agent_uuid, consumer in self.consumers.items():
@@ -203,8 +229,8 @@ class ConsumerManager:
     
     def run_forever(self):
         """
-        Run consumer manager indefinitely
-        Useful for production deployment
+        Run consumer manager indefinitely.
+        Useful for production deployment.
         """
         logger.info("Consumer manager running indefinitely...")
         try:
@@ -228,7 +254,15 @@ consumer_manager = ConsumerManager()
 
 
 def run_consumers():
-    """Main function to run all consumers"""
+    """
+    Main function to run all consumers.
+    
+    Returns:
+        None
+
+    Raises:
+        Exception: An error occurred while running consumers.
+    """
     try:
         # Initialize agents
         consumer_manager.initialize_agents()

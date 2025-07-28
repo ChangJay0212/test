@@ -10,7 +10,7 @@ from core.health_check import health_checker
 
 class CostMonitorManager:
     """
-    Manager for cost monitoring operations and reporting
+    CostMonitorManager class for cost monitoring operations and reporting.
     """
     
     def __init__(self):
@@ -18,10 +18,14 @@ class CostMonitorManager:
     
     def get_dashboard_data(self) -> Dict[str, Any]:
         """
-        Get comprehensive dashboard data for cost monitoring
+        Get comprehensive dashboard data for cost monitoring.
         
         Returns:
-            Dictionary with dashboard information
+            Dict[str, Any]: Dictionary with dashboard information.
+
+        Raises:
+            Exception:
+                An error occurred while getting dashboard data.
         """
         try:
             # Get statistics for different time periods
@@ -38,6 +42,18 @@ class CostMonitorManager:
             # Calculate uptime
             uptime_seconds = time.time() - self.start_time
             uptime_hours = uptime_seconds / 3600
+            
+            # Ensure all statistics have required fields
+            for stats in [hourly_stats, daily_stats, weekly_stats]:
+                if not isinstance(stats, dict):
+                    stats = {}
+                stats.setdefault("total_requests", 0)
+                stats.setdefault("total_cost", 0.0)
+                stats.setdefault("total_tokens", 0)
+                stats.setdefault("success_rate", 1.0)
+                stats.setdefault("by_agent_type", {})
+                stats.setdefault("by_model", {})
+                stats.setdefault("cost_trend", [])
             
             return {
                 "system_info": {
@@ -74,7 +90,25 @@ class CostMonitorManager:
             
         except Exception as e:
             logger.error(f"Error generating dashboard data: {e}")
-            return {"error": str(e)}
+            # Return a safe default structure
+            return {
+                "system_info": {
+                    "uptime_hours": (time.time() - self.start_time) / 3600,
+                    "health_status": {"kafka": False, "registered_agents": 0},
+                    "monitoring_since": self.start_time
+                },
+                "cost_overview": {
+                    "last_hour": {"requests": 0, "cost": 0.0, "tokens": 0, "success_rate": 1.0},
+                    "last_24_hours": {"requests": 0, "cost": 0.0, "tokens": 0, "success_rate": 1.0},
+                    "last_week": {"requests": 0, "cost": 0.0, "tokens": 0, "success_rate": 1.0}
+                },
+                "agent_performance": {},
+                "model_usage": {},
+                "cost_trend": [],
+                "top_consumers": [],
+                "alerts": [],
+                "error": str(e)
+            }
     
     def _generate_alerts(self, stats: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -88,35 +122,42 @@ class CostMonitorManager:
         """
         alerts = []
         
+        # Ensure all required fields exist with default values
+        total_cost = stats.get("total_cost", 0.0)
+        success_rate = stats.get("success_rate", 1.0)
+        total_requests = stats.get("total_requests", 0)
+        failed_requests = stats.get("failed_requests", 0)
+        average_response_time = stats.get("average_response_time", 0.0)
+        
         # High cost alert
-        if stats["total_cost"] > 10.0:  # More than $10 in 24 hours
+        if total_cost > 10.0:  # More than $10 in 24 hours
             alerts.append({
                 "type": "high_cost",
                 "level": "warning",
-                "message": f"High daily cost: ${stats['total_cost']:.2f}",
+                "message": f"High daily cost: ${total_cost:.2f}",
                 "details": f"Total cost in last 24 hours exceeds $10"
             })
         
         # High failure rate alert
-        if stats["success_rate"] < 0.9 and stats["total_requests"] > 10:
+        if success_rate < 0.9 and total_requests > 10:
             alerts.append({
                 "type": "high_failure_rate",
                 "level": "error", 
-                "message": f"High failure rate: {(1-stats['success_rate'])*100:.1f}%",
-                "details": f"Success rate below 90% with {stats['failed_requests']} failures"
+                "message": f"High failure rate: {(1-success_rate)*100:.1f}%",
+                "details": f"Success rate below 90% with {failed_requests} failures"
             })
         
         # High average response time alert
-        if stats["average_response_time"] > 10.0:  # More than 10 seconds
+        if average_response_time > 10.0:  # More than 10 seconds
             alerts.append({
                 "type": "slow_response",
                 "level": "warning",
-                "message": f"Slow average response time: {stats['average_response_time']:.1f}s",
+                "message": f"Slow average response time: {average_response_time:.1f}s",
                 "details": "Consider optimizing prompts or checking API performance"
             })
         
         # No requests alert
-        if stats["total_requests"] == 0:
+        if total_requests == 0:
             alerts.append({
                 "type": "no_activity",
                 "level": "info",

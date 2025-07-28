@@ -12,7 +12,9 @@ import threading
 
 @dataclass
 class RequestCostInfo:
-    """Information about a single request's cost"""
+    """
+    RequestCostInfo class containing information about a single request's cost.
+    """
     timestamp: float
     agent_uuid: str
     agent_type: str

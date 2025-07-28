@@ -7,13 +7,17 @@ from pathlib import Path
 
 def setup_logger(name: str = "agentic_system") -> logging.Logger:
     """
-    Set up logger with configuration from logging.conf
+    Set up logger with configuration from logging.conf.
     
     Args:
-        name: Logger name
+        name (str): Logger name. Defaults to "agentic_system".
         
     Returns:
-        Configured logger instance
+        logging.Logger: Configured logger instance.
+
+    Raises:
+        Exception:
+            An error occurred while setting up the logger.
     """
     # Ensure logs directory exists
     log_dir = Path("logs")

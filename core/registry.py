@@ -9,7 +9,9 @@ import config.settings as settings
 
 @dataclass
 class AgentInfo:
-    """Agent information for registry"""
+    """
+    AgentInfo class for agent information in registry.
+    """
     agent_uuid: str
     agent_type: str
     description: str
@@ -19,7 +21,7 @@ class AgentInfo:
 
 class AgentRegistry:
     """
-    Registry for managing agent metadata and topic mappings
+    AgentRegistry class for managing agent metadata and topic mappings.
     """
     
     def __init__(self):
@@ -28,7 +30,10 @@ class AgentRegistry:
         self._initialize_default_agents()
     
     def _initialize_default_agents(self):
-        """Initialize default agents in the registry"""
+        """
+        Initialize default agents in the registry.
+
+        """
         default_agents = [
             {
                 "agent_uuid": "english_teacher_001",
@@ -50,13 +55,17 @@ class AgentRegistry:
     
     def register_agent(self, agent_info: AgentInfo) -> bool:
         """
-        Register a new agent in the registry
+        Register a new agent in the registry.
         
         Args:
-            agent_info: Agent information to register
+            agent_info (AgentInfo): Agent information to register.
             
         Returns:
-            True if registration successful, False otherwise
+            bool: True if registration successful, False otherwise.
+
+        Raises:
+            Exception:
+                An error occurred while registering the agent.
         """
         try:
             self.agents[agent_info.agent_uuid] = agent_info
@@ -69,13 +78,17 @@ class AgentRegistry:
     
     def unregister_agent(self, agent_uuid: str) -> bool:
         """
-        Unregister an agent from the registry
+        Unregister an agent from the registry.
         
         Args:
-            agent_uuid: UUID of agent to unregister
+            agent_uuid (str): UUID of agent to unregister.
             
         Returns:
-            True if unregistration successful, False otherwise
+            bool: True if unregistration successful, False otherwise.
+
+        Raises:
+            Exception:
+                An error occurred while unregistering the agent.
         """
         try:
             if agent_uuid in self.agents:
@@ -94,25 +107,25 @@ class AgentRegistry:
     
     def get_agent_by_uuid(self, agent_uuid: str) -> Optional[AgentInfo]:
         """
-        Get agent information by UUID
+        Get agent information by UUID.
         
         Args:
-            agent_uuid: Agent UUID
+            agent_uuid (str): Agent UUID.
             
         Returns:
-            AgentInfo if found, None otherwise
+            Optional[AgentInfo]: AgentInfo if found, None otherwise.
         """
         return self.agents.get(agent_uuid)
     
     def get_agent_by_topic(self, topic: str) -> Optional[AgentInfo]:
         """
-        Get agent information by topic
+        Get agent information by topic.
         
         Args:
-            topic: Topic name
+            topic (str): Topic name.
             
         Returns:
-            AgentInfo if found, None otherwise
+            Optional[AgentInfo]: AgentInfo if found, None otherwise.
         """
         agent_uuid = self.topic_to_agent.get(topic)
         if agent_uuid:
@@ -121,28 +134,28 @@ class AgentRegistry:
     
     def list_agents(self) -> List[AgentInfo]:
         """
-        List all registered agents
+        List all registered agents.
         
         Returns:
-            List of all registered agent information
+            List[AgentInfo]: List of all registered agent information.
         """
         return list(self.agents.values())
     
     def list_topics(self) -> List[str]:
         """
-        List all registered topics
+        List all registered topics.
         
         Returns:
-            List of all registered topic names
+            List[str]: List of all registered topic names.
         """
         return list(self.topic_to_agent.keys())
     
     def get_agent_descriptions(self) -> Dict[str, str]:
         """
-        Get mapping of agent types to descriptions for dynamic assignment
+        Get mapping of agent types to descriptions for dynamic assignment.
         
         Returns:
-            Dictionary mapping agent types to descriptions
+            Dict[str, str]: Dictionary mapping agent types to descriptions.
         """
         return {
             agent.agent_type: agent.description 
@@ -151,14 +164,18 @@ class AgentRegistry:
     
     def update_agent_status(self, agent_uuid: str, status: str) -> bool:
         """
-        Update agent status
+        Update agent status.
         
         Args:
-            agent_uuid: Agent UUID
-            status: New status (active, inactive, error)
+            agent_uuid (str): Agent UUID.
+            status (str): New status (active, inactive, error).
             
         Returns:
-            True if update successful, False otherwise
+            bool: True if update successful, False otherwise.
+
+        Raises:
+            Exception:
+                An error occurred while updating agent status.
         """
         try:
             if agent_uuid in self.agents:
