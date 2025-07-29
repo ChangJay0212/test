@@ -291,7 +291,7 @@ class BaseAgent(ABC):
 
     def _analyze_tool_needs(self, prompt: str) -> Dict[str, Any]:
         """
-        Use simplified analysis to determine if tools are needed and which ones.
+        Use LLM-based reasoning to determine if tools are needed and which ones.
 
         Args:
             prompt (str): User prompt to analyze.
@@ -302,11 +302,121 @@ class BaseAgent(ABC):
         if not self.tools:
             return {"should_use_tools": False, "recommended_tools": []}
 
-        # Use direct keyword analysis for better reliability
+        try:
+            # Create tool descriptions for the LLM
+            tool_descriptions = []
+            for tool in self.tools:
+                tool_descriptions.append(f"- {tool.name}: {tool.description}")
+
+            tools_text = "\n".join(tool_descriptions)
+
+            # Create analysis prompt for the LLM
+            analysis_prompt = f"""Analyze the following user request and determine which tools (if any) would be helpful to answer it.
+
+User request: "{prompt}"
+
+Available tools:
+{tools_text}
+
+Please analyze the user's request and respond with a JSON object containing:
+- "should_use_tools": boolean (true if any tools would be helpful)
+- "recommended_tools": list of tool names that would be useful
+- "reasoning": brief explanation of your analysis
+
+Consider:
+1. Does the request require real-time information? (web_search)
+2. Does it involve mathematical calculations? (calculator) 
+3. Does it ask about weather conditions? (weather_check)
+4. Could the request be answered with general knowledge alone?
+
+Respond only with valid JSON, no additional text."""
+
+            logger.info(
+                f"Sending tool analysis prompt to LLM for request: {prompt[:50]}..."
+            )
+
+            # Get LLM analysis with shorter parameters to reduce cost
+            llm_response = self.llm_engine.generate_response(
+                analysis_prompt,
+                max_tokens=200,  # Keep response short
+                temperature=0.1,  # Low temperature for more consistent analysis
+            )
+
+            logger.info(f"LLM tool analysis response: {llm_response}")
+
+            # Parse the LLM response
+            import json
+            import re
+
+            # Try to extract JSON from the response
+            json_match = re.search(r"\{.*\}", llm_response, re.DOTALL)
+            if json_match:
+                try:
+                    analysis_result = json.loads(json_match.group())
+
+                    # Validate the response structure
+                    if all(
+                        key in analysis_result
+                        for key in [
+                            "should_use_tools",
+                            "recommended_tools",
+                            "reasoning",
+                        ]
+                    ):
+                        # Filter recommended tools to only include available ones
+                        available_tool_names = [tool.name for tool in self.tools]
+                        filtered_tools = [
+                            tool
+                            for tool in analysis_result["recommended_tools"]
+                            if tool in available_tool_names
+                        ]
+
+                        result = {
+                            "should_use_tools": analysis_result["should_use_tools"]
+                            and len(filtered_tools) > 0,
+                            "recommended_tools": filtered_tools,
+                            "reasoning": analysis_result["reasoning"],
+                        }
+
+                        logger.info(f"LLM-based tool analysis result: {result}")
+                        return result
+                    else:
+                        logger.warning(
+                            "LLM response missing required keys, falling back to keyword analysis"
+                        )
+
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"Failed to parse LLM JSON response: {e}, falling back to keyword analysis"
+                    )
+            else:
+                logger.warning(
+                    "No JSON found in LLM response, falling back to keyword analysis"
+                )
+
+        except Exception as e:
+            logger.error(
+                f"Error in LLM-based tool analysis: {e}, falling back to keyword analysis"
+            )
+
+        # Fallback to keyword-based analysis if LLM analysis fails
+        logger.info("Using fallback keyword-based tool analysis")
+        return self._fallback_keyword_analysis(prompt)
+
+    def _fallback_keyword_analysis(self, prompt: str) -> Dict[str, Any]:
+        """
+        Fallback keyword-based analysis when LLM analysis fails.
+
+        Args:
+            prompt (str): User prompt to analyze.
+
+        Returns:
+            Dict[str, Any]: Analysis result with tool recommendations.
+        """
         recommended_tools = []
         prompt_lower = prompt.lower()
 
-        # Simple keyword-based tool recommendation with more aggressive matching
+        # Simple keyword-based tool recommendation
         for tool in self.tools:
             if tool.name == "web_search":
                 search_keywords = [
@@ -327,9 +437,6 @@ class BaseAgent(ABC):
                 ]
                 if any(keyword in prompt_lower for keyword in search_keywords):
                     recommended_tools.append(tool.name)
-                    logger.info(
-                        f"Tool {tool.name} recommended based on keywords in: {prompt[:50]}..."
-                    )
 
             elif tool.name == "calculator":
                 calc_keywords = [
@@ -354,7 +461,6 @@ class BaseAgent(ABC):
                     "乘",
                     "除",
                 ]
-                # Also check for numbers that might indicate calculations
                 import re
 
                 has_numbers = re.search(r"\d+", prompt)
@@ -367,9 +473,6 @@ class BaseAgent(ABC):
                     and any(op in prompt for op in ["+", "-", "*", "/", "×", "÷"])
                 ):
                     recommended_tools.append(tool.name)
-                    logger.info(
-                        f"Tool {tool.name} recommended based on calculation patterns in: {prompt[:50]}..."
-                    )
 
             elif tool.name == "weather_check":
                 weather_keywords = [
@@ -399,20 +502,16 @@ class BaseAgent(ABC):
                 ]
                 if any(keyword in prompt_lower for keyword in weather_keywords):
                     recommended_tools.append(tool.name)
-                    logger.info(
-                        f"Tool {tool.name} recommended based on weather keywords in: {prompt[:50]}..."
-                    )
 
-        # Be more aggressive - if we have relevant tools, use them
         should_use = len(recommended_tools) > 0
 
         result = {
             "should_use_tools": should_use,
             "recommended_tools": recommended_tools,
-            "reasoning": f"Keyword-based analysis found {len(recommended_tools)} relevant tools",
+            "reasoning": f"Keyword-based fallback analysis found {len(recommended_tools)} relevant tools",
         }
 
-        logger.info(f"Tool analysis result: {result}")
+        logger.info(f"Fallback keyword analysis result: {result}")
         return result
 
     def _extract_tool_parameters(self, prompt: str, tool_name: str) -> Dict[str, Any]:
