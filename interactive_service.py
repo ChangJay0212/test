@@ -12,8 +12,6 @@ from typing import Any, Dict, Optional
 
 from src.monitoring.cost_manager import cost_monitor_manager
 from src.producer.producer import StudentProducer
-from src.tools.calculator import Calculator
-from src.tools.weather_check import WeatherCheck
 from src.tools.web_search import WebSearchTool
 from src.utils.logger import logger
 
@@ -638,8 +636,6 @@ class InteractiveService:
                     "search",
                     {"query": "artificial intelligence", "max_results": 3},
                 ),
-                (Calculator(), "calculate", {"expression": "2 + 2 * 3"}),
-                (WeatherCheck(), "weather", {"location": "New York"}),
             ]
 
             print(f"Found {len(tools_to_test)} tools to test...\n")
@@ -700,8 +696,6 @@ class InteractiveService:
 
 Please use any relevant tools available to provide a comprehensive answer. This is a tool testing scenario, so actively look for opportunities to use tools like:
 - Web search for current information
-- Calculator for any mathematical calculations  
-- Weather check for weather-related queries
 
 Question: {question}"""
 
@@ -719,7 +713,7 @@ Question: {question}"""
         print("=" * 60)
 
         try:
-            tools = [WebSearchTool(), Calculator(), WeatherCheck()]
+            tools = [WebSearchTool()]
 
             for i, tool in enumerate(tools, 1):
                 print(f"🔧 {i}. {tool.name}")

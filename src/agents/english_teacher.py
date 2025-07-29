@@ -8,8 +8,6 @@ from typing import Any, Dict
 from src.agents.base_agent import BaseAgent
 from src.llm_engines.factory import LLMEngineFactory
 from src.monitoring.cost_monitor import cost_monitor
-from src.tools.calculator import Calculator
-from src.tools.weather_check import WeatherCheck
 from src.tools.web_search import WebSearchTool
 from src.utils.logger import logger
 
@@ -28,7 +26,7 @@ class EnglishTeacherAgent(BaseAgent):
         )
 
         # Initialize tools
-        tools = [WebSearchTool(), Calculator(), WeatherCheck()]
+        tools = [WebSearchTool()]
 
         # Initialize base agent
         super().__init__(

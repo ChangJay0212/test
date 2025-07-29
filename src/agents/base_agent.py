@@ -256,7 +256,7 @@ class BaseAgent(ABC):
                         # Generate response with tool results
                         response_data["content"] = (
                             self._generate_response_with_tool_results(
-                                prompt, response_data["tool_results"], user_id=user_id, **llm_kwargs
+                                prompt, response_data["tool_results"], **llm_kwargs
                             )
                         )
                     else:
@@ -332,9 +332,7 @@ Please analyze the user's request and respond with a JSON object containing:
 
 Consider:
 1. Does the request require real-time information? (web_search)
-2. Does it involve mathematical calculations? (calculator) 
-3. Does it ask about weather conditions? (weather_check)
-4. Could the request be answered with general knowledge alone?
+2. Could the request be answered with general knowledge alone?
 
 Respond only with valid JSON, no additional text."""
 
@@ -408,122 +406,12 @@ Respond only with valid JSON, no additional text."""
 
         # Fallback to keyword-based analysis if LLM analysis fails
         logger.info("Using fallback keyword-based tool analysis")
-        return self._fallback_keyword_analysis(prompt)
+        return {}
 
-    def _fallback_keyword_analysis(self, prompt: str) -> Dict[str, Any]:
-        """
-        Fallback keyword-based analysis when LLM analysis fails.
-
-        Args:
-            prompt (str): User prompt to analyze.
-
-        Returns:
-            Dict[str, Any]: Analysis result with tool recommendations.
-        """
-        recommended_tools = []
-        prompt_lower = prompt.lower()
-
-        # Simple keyword-based tool recommendation
-        for tool in self.tools:
-            if tool.name == "web_search":
-                search_keywords = [
-                    "search",
-                    "find",
-                    "lookup",
-                    "latest",
-                    "current",
-                    "recent",
-                    "information about",
-                    "what is",
-                    "tell me about",
-                    "查找",
-                    "搜尋",
-                    "最新",
-                    "資訊",
-                    "什麼是",
-                ]
-                if any(keyword in prompt_lower for keyword in search_keywords):
-                    recommended_tools.append(tool.name)
-
-            elif tool.name == "calculator":
-                calc_keywords = [
-                    "calculate",
-                    "compute",
-                    "math",
-                    "計算",
-                    "數學",
-                    "plus",
-                    "minus",
-                    "times",
-                    "divided",
-                    "+",
-                    "-",
-                    "*",
-                    "/",
-                    "=",
-                    "×",
-                    "÷",
-                    "加",
-                    "減",
-                    "乘",
-                    "除",
-                ]
-                import re
-
-                has_numbers = re.search(r"\d+", prompt)
-                has_calc_keywords = any(
-                    keyword in prompt_lower for keyword in calc_keywords
-                )
-
-                if has_calc_keywords or (
-                    has_numbers
-                    and any(op in prompt for op in ["+", "-", "*", "/", "×", "÷"])
-                ):
-                    recommended_tools.append(tool.name)
-
-            elif tool.name == "weather_check":
-                weather_keywords = [
-                    "weather",
-                    "temperature",
-                    "temp",
-                    "forecast",
-                    "climate",
-                    "rain",
-                    "sunny",
-                    "cloudy",
-                    "天氣",
-                    "氣溫",
-                    "預報",
-                    "下雨",
-                    "晴天",
-                    "陰天",
-                    "degrees",
-                    "celsius",
-                    "fahrenheit",
-                    "hot",
-                    "cold",
-                    "warm",
-                    "cool",
-                    "humidity",
-                    "wind",
-                ]
-                if any(keyword in prompt_lower for keyword in weather_keywords):
-                    recommended_tools.append(tool.name)
-
-        should_use = len(recommended_tools) > 0
-
-        result = {
-            "should_use_tools": should_use,
-            "recommended_tools": recommended_tools,
-            "reasoning": f"Keyword-based fallback analysis found {len(recommended_tools)} relevant tools",
-        }
-
-        logger.info(f"Fallback keyword analysis result: {result}")
-        return result
 
     def _extract_tool_parameters(self, prompt: str, tool_name: str) -> Dict[str, Any]:
         """
-        Extract parameters for a specific tool from the prompt with improved logic.
+        Extract parameters for a specific tool from the prompt using LLM if possible, fallback to original logic if LLM fails.
 
         Args:
             prompt (str): User prompt.
@@ -536,103 +424,40 @@ Respond only with valid JSON, no additional text."""
             f"Extracting parameters for tool '{tool_name}' from prompt: {prompt[:100]}..."
         )
 
-        if tool_name == "web_search":
-            # For web search, use the entire prompt as query but clean it up
-            query = prompt.strip()
-            # Remove common question words to make better search query
-            query_words = query.split()
-            filtered_words = [
-                word
-                for word in query_words
-                if word.lower() not in ["what", "is", "the", "tell", "me", "about"]
-            ]
-            if filtered_words:
-                query = " ".join(filtered_words)
-
-            params = {"query": query, "max_results": 5}
-            logger.info(f"Web search parameters: {params}")
-            return params
-
-        elif tool_name == "calculator":
-            # Extract mathematical expressions with better patterns
-            import re
-
-            # Look for explicit math expressions
-            math_patterns = [
-                r"(\d+(?:\.\d+)?\s*[+\-*/×÷]\s*\d+(?:\.\d+)?(?:\s*[+\-*/×÷]\s*\d+(?:\.\d+)?)*)",
-                r"(\d+\s*\+\s*\d+)",
-                r"(\d+\s*\-\s*\d+)",
-                r"(\d+\s*\*\s*\d+)",
-                r"(\d+\s*/\s*\d+)",
-                r"(\d+\s*×\s*\d+)",
-                r"(\d+\s*÷\s*\d+)",
-            ]
-
-            expression = None
-            for pattern in math_patterns:
-                match = re.search(pattern, prompt)
-                if match:
-                    expression = match.group(1).strip()
-                    break
-
-            # If no explicit math found, look for numbers and assume it's a calculation
-            if not expression:
-                numbers = re.findall(r"\d+(?:\.\d+)?", prompt)
-                if len(numbers) >= 2:
-                    expression = " + ".join(numbers)  # Default to addition
-                elif len(numbers) == 1:
-                    expression = numbers[0]
-                else:
-                    expression = prompt  # Fallback to entire prompt
-
-            params = {"expression": expression}
-            logger.info(f"Calculator parameters: {params}")
-            return params
-
-        elif tool_name == "weather_check":
-            # Extract location with better patterns
-            import re
-
-            # Multiple patterns to find location - ordered from most specific to most general
-            location_patterns = [
-                r"(?:weather|temperature|temp|forecast).*?(?:in|at|for)\s+([A-Za-z\s,]+?)(?:\s|$|[.?!])",
-                r"(?:in|at|for)\s+([A-Za-z\s,]+?)(?:\s|$|[.?!])",
-                r"([A-Za-z\s,]+?)(?:\s+weather|\s+temperature|\s+temp|\s+forecast)",
-                r"^([A-Za-z\s,]+?)(?:\s+temp|temperature)(?:\s|$|[.?!])",  # For "tokyo temp"
-                r"(\w+(?:\s+\w+)*)\s*[?]?$",  # Last resort - end of sentence
-            ]
-
-            location = "current location"  # Default
-
-            for pattern in location_patterns:
-                match = re.search(pattern, prompt, re.IGNORECASE)
-                if match:
-                    potential_location = match.group(1).strip().rstrip(".,?!")
-                    # Filter out common non-location words
-                    if potential_location.lower() not in [
-                        "the",
-                        "weather",
-                        "temperature",
-                        "temp",
-                        "forecast",
-                        "what",
-                        "is",
-                        "check",
-                        "get",
-                    ]:
-                        location = potential_location
-                        logger.info(
-                            f"Found location '{location}' using pattern: {pattern}"
-                        )
-                        break
-
-            params = {"location": location}
-            logger.info(f"Weather check parameters: {params}")
-            return params
-
-        else:
+        tool = self.tool_registry.get(tool_name)
+        if not tool:
             logger.warning(f"Unknown tool name: {tool_name}")
             return {}
+
+        schema = tool.get_parameters_schema()
+        tool_desc = tool.description
+
+        # Remove search_keywords from schema for LLM clarity
+        schema_for_llm = dict(schema)
+        schema_for_llm.pop("required", None)
+
+        llm_prompt = f"""Given the following user request and tool definition, extract the best parameters for the tool as a JSON object.\n\nUser request: \"{prompt}\"\n\nTool: {tool_name}\nDescription: {tool_desc}\nParameters JSON schema:\n{schema_for_llm}\n\nRespond only with a valid JSON object containing the parameters for the tool.\nIf a parameter is not present in the user request, use the default value if available in the schema, otherwise omit it."""
+
+        try:
+            llm_response = self.llm_engine.generate_response(
+                llm_prompt,
+                max_tokens=150,
+                temperature=0.1,
+            )
+            logger.info(f"LLM parameter extraction response: {llm_response}")
+            import json
+            import re
+            json_match = re.search(r"\{.*\}", llm_response, re.DOTALL)
+            if json_match:
+                params = json.loads(json_match.group())
+                logger.info(f"LLM-extracted parameters: {params}")
+                return params
+        except Exception as e:
+            logger.warning(f"LLM parameter extraction failed: {e}, falling back to rule-based extraction.")
+
+        # If LLM extraction fails, just return empty dict and log warning
+        logger.warning(f"Parameter extraction failed for tool '{tool_name}', returning empty parameters.")
+        return {}
 
     def _generate_response_with_tool_results(
         self, original_prompt: str, tool_results: Dict[str, Any], **kwargs
@@ -662,12 +487,6 @@ Respond only with valid JSON, no additional text."""
                         title = res.get("title", "No title")
                         snippet = res.get("snippet", "No description")
                         tool_context.append(f"{i}. {title}: {snippet}")
-                elif tool_name == "calculator":
-                    calc_result = result.get("result", "No result")
-                    tool_context.append(f"Calculation result: {calc_result}")
-                elif tool_name == "weather_check":
-                    weather_info = result.get("weather", "No weather data")
-                    tool_context.append(f"Weather information: {weather_info}")
 
         enhanced_prompt = f"""User request: {original_prompt}
 
