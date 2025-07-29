@@ -68,37 +68,6 @@
 系統會自動搜尋最新資訊並整合到回應中
 ```
 
-## � 使用範例
-
-### 🎓 英文教學
-```
-Q: What is the difference between "affect" and "effect"?
-🤖 English Teacher: "Affect" is typically a verb meaning to influence...
-
-Q: How do I write a compelling introduction?
-🤖 English Teacher: A compelling introduction should hook the reader...
-```
-
-### 🇨🇳 中文教學
-```
-Q: 什麼是成語？請給我幾個例子
-🤖 Chinese Teacher: 成語是中國傳統文化中的固定詞語組合...
-
-Q: 請解釋李白的《靜夜思》
-🤖 Chinese Teacher: 《靜夜思》是李白的經典作品，表達了詩人的思鄉之情...
-```
-
-### 🔧 工具調用範例
-```
-Q: What's 25 * 16?
-🤖 System: 調用計算器工具...
-🤖 Teacher: The result is 400...
-
-Q: tokyo temp?
-🤖 System: 調用天氣查詢工具...
-🤖 Teacher: Tokyo current temperature is 22°C, partly cloudy...
-```
-
 ## �️ 系統管理
 
 ### 啟動系統
@@ -210,6 +179,53 @@ docker logs agentic-app
 - `tools/` - 工具系統
 - `llm_engines/` - LLM 引擎
 - `config/` - 系統配置
+
+## 💰 成本管理配置
+
+系統支持靈活的 token 成本配置，可以追蹤不同 LLM 服務的使用費用：
+
+### 📋 設置成本參數
+
+1. **複製環境變數模板**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **編輯成本配置**
+   ```bash
+   # Gemini 定價 (每 1K tokens 的美元費用)
+   GEMINI_INPUT_COST_PER_1K=0.0005
+   GEMINI_OUTPUT_COST_PER_1K=0.0015
+   
+   # Ollama 定價 (本地部署免費)
+   OLLAMA_COMPUTE_COST_PER_1K=0.0
+   
+   # 成本警報閾值 (每日費用超過此金額時警報)
+   COST_ALERT_THRESHOLD=10.0
+   
+   # 啟用/禁用成本追蹤
+   COST_TRACKING_ENABLED=true
+   ```
+
+### 📊 成本監控功能
+
+- **即時成本追蹤**: 每個請求的 token 使用和費用
+- **統計報表**: 小時、日、週的成本分析
+- **費用警報**: 超出預設閾值時自動警報
+- **多引擎支持**: 支持 Gemini、Ollama、OpenAI、Claude 等
+
+### 💡 成本優化建議
+
+```bash
+# 查看成本統計
+docker logs agentic-app | grep "cost"
+
+# 使用 Ollama (免費) 降低成本
+docker-compose -f docker-compose.ollama.yml up -d
+
+# 設置較低的成本警報閾值
+COST_ALERT_THRESHOLD=5.0
+```
 
 ---
 
