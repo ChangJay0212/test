@@ -18,6 +18,7 @@ TOPIC_ENGLISH_TEACHER = "english_teacher"
 TOPIC_CHINESE_TEACHER = "chinese_teacher"
 TOPIC_DYNAMIC_ASSIGN = "dynamic_assign"
 TOPIC_RESULT = "result"
+TOPIC_TOKEN_USAGE = "token_usage"  # New topic for LLM engines to send token usage data
 
 # LLM Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

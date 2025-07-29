@@ -54,19 +54,21 @@ class StudentProducer:
             self.result_consumer.close()
         logger.info("Result listener stopped")
 
-    def send_question(self, message: str, agent_type: str = None) -> str:
+    def send_question(self, message: str, agent_type: str = None, user_id: str = None) -> str:
         """
         Send a question to the teaching system
 
         Args:
             message: Student question
             agent_type: Specific agent type to use (optional)
+            user_id: User identifier for cost tracking (optional, defaults to producer_uuid)
 
         Returns:
             Request ID for tracking the response
         """
         try:
             request_id = str(uuid.uuid4())
+            effective_user_id = user_id or self.producer_uuid
 
             # Determine target topic
             if agent_type:
@@ -82,10 +84,11 @@ class StudentProducer:
                     logger.error("Failed to assign agent for message")
                     return None
 
-            # Prepare message
+            # Prepare message with user_id
             kafka_message = {
                 "message": message,
                 "producer_uuid": self.producer_uuid,
+                "user_id": effective_user_id,
                 "request_id": request_id,
                 "timestamp": time.time(),
             }
@@ -97,6 +100,7 @@ class StudentProducer:
             self.pending_requests[request_id] = {
                 "message": message,
                 "target_topic": target_topic,
+                "user_id": effective_user_id,
                 "timestamp": time.time(),
                 "status": "pending",
             }

@@ -60,6 +60,7 @@ class EnglishTeacherAgent(BaseAgent):
             user_message = message.get("message", "")
             producer_uuid = message.get("producer_uuid", "")
             request_id = message.get("request_id", "")
+            user_id = message.get("user_id", producer_uuid or "anonymous")  # Use producer_uuid as user_id fallback
 
             if not user_message:
                 return {
@@ -77,7 +78,14 @@ class EnglishTeacherAgent(BaseAgent):
             )
 
             # Generate response with intelligent tool usage
-            response_data = self.generate_response(full_prompt, use_tools=True)
+            response_data = self.generate_response(
+                full_prompt, 
+                use_tools=True, 
+                user_id=user_id,
+                request_id=request_id,
+                agent_uuid=self.agent_uuid,
+                agent_type=self.agent_type
+            )
 
             # Get cost information from LLM engine
             cost_stats = self.llm_engine.get_cost_statistics()

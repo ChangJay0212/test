@@ -2,6 +2,7 @@
 Abstract base class for agents with cost monitoring
 """
 
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
@@ -169,7 +170,7 @@ class BaseAgent(ABC):
             return {"success": False, "error": error_msg}
 
     def generate_response(
-        self, prompt: str, use_tools: bool = True, **kwargs
+        self, prompt: str, use_tools: bool = True, user_id: str = "anonymous", **kwargs
     ) -> Dict[str, Any]:
         """
         Generate response using the agent's LLM engine with intelligent tool usage.
@@ -177,6 +178,7 @@ class BaseAgent(ABC):
         Args:
             prompt (str): Input prompt.
             use_tools (bool): Whether to consider tools. Defaults to True.
+            user_id (str): User identifier for cost tracking.
             **kwargs: Additional parameters for LLM.
 
         Returns:
@@ -186,6 +188,20 @@ class BaseAgent(ABC):
             Exception: An error occurred while generating response.
         """
         try:
+            # Extract common parameters for LLM engine
+            request_id = kwargs.get("request_id", f"req_{int(time.time())}")
+            agent_uuid = kwargs.get("agent_uuid", self.agent_uuid)
+            agent_type = kwargs.get("agent_type", self.agent_type)
+            
+            # Pass agent information to LLM engine
+            llm_kwargs = {
+                **kwargs,
+                "user_id": user_id,
+                "request_id": request_id,
+                "agent_uuid": agent_uuid,
+                "agent_type": agent_type
+            }
+
             response_data = {
                 "content": "",
                 "tools_used": [],
@@ -240,7 +256,7 @@ class BaseAgent(ABC):
                         # Generate response with tool results
                         response_data["content"] = (
                             self._generate_response_with_tool_results(
-                                prompt, response_data["tool_results"], **kwargs
+                                prompt, response_data["tool_results"], user_id=user_id, **llm_kwargs
                             )
                         )
                     else:
@@ -249,31 +265,22 @@ class BaseAgent(ABC):
                         )
                         # Generate response without tools
                         response_data["content"] = self.llm_engine.generate_response(
-                            prompt, **kwargs
+                            prompt, **llm_kwargs
                         )
                 else:
                     logger.info(f"Agent {self.agent_uuid} decided not to use tools")
                     # Generate response without tools
                     response_data["content"] = self.llm_engine.generate_response(
-                        prompt, **kwargs
+                        prompt, **llm_kwargs
                     )
             else:
                 # Generate response without tools
                 response_data["content"] = self.llm_engine.generate_response(
-                    prompt, **kwargs
+                    prompt, **llm_kwargs
                 )
 
-            # Get cost information from LLM engine after response generation
-            if hasattr(self.llm_engine, "get_cost_statistics"):
-                cost_stats = self.llm_engine.get_cost_statistics()
-                # Get the latest request cost information
-                response_data["cost_info"] = {
-                    "input_tokens": cost_stats.get("last_request_input_tokens", 0),
-                    "output_tokens": cost_stats.get("last_request_output_tokens", 0),
-                    "input_cost": cost_stats.get("last_request_input_cost", 0.0),
-                    "output_cost": cost_stats.get("last_request_output_cost", 0.0),
-                    "total_cost": cost_stats.get("last_request_total_cost", 0.0),
-                }
+            # Note: Cost information is now handled by the cost monitor via Kafka
+            # The LLM engine sends token usage data directly to the cost monitor
 
             return response_data
 

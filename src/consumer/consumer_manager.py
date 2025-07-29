@@ -193,10 +193,14 @@ class ConsumerManager:
 
         try:
             # Get all topics from registry dynamically
-            topics = agent_registry.get_all_topics() + [settings.TOPIC_RESULT]
+            topics = agent_registry.get_all_topics() + [settings.TOPIC_RESULT, settings.TOPIC_TOKEN_USAGE]
             kafka_client.create_topics(topics)
 
-            # Start all consumers
+            # Start cost monitor token usage consumer
+            from src.monitoring.cost_monitor import cost_monitor
+            cost_monitor.start_token_usage_consumer()
+
+            # Start all agent consumers
             for consumer in self.consumers.values():
                 consumer.start_consuming()
 

@@ -30,6 +30,8 @@ class InteractiveService:
         self.command_queue = queue.Queue()
         self.auto_demo_enabled = False
         self.demo_interval = 60  # seconds between auto demos
+        self._last_request_id = None  # Track last request to avoid duplicate display
+        self._output_lock = threading.Lock()  # Thread safety for output
 
     def start_service(self):
         """
@@ -47,6 +49,14 @@ class InteractiveService:
             # Wait for infrastructure to be ready
             logger.info("Waiting for infrastructure to be ready...")
             time.sleep(15)
+            
+            # Start cost monitor token usage consumer
+            try:
+                from src.monitoring.cost_monitor import cost_monitor
+                cost_monitor.start_token_usage_consumer()
+                logger.info("Cost monitor token usage consumer started")
+            except Exception as e:
+                logger.warning(f"Failed to start cost monitor token usage consumer: {e}")
 
             self.is_running = True
             logger.info("Interactive Service started successfully!")
@@ -394,20 +404,30 @@ class InteractiveService:
             initial_stats = cost_monitor_manager.get_dashboard_data()
             start_time = time.time()
 
-            # Send the question
-            request_id = available_client.producer.send_question(question, agent_type)
+            # Send the question directly through producer to avoid duplicate output
+            request_id = available_client.producer.send_question(question, agent_type, user_id="service_user")
 
             if request_id:
-                teacher_type = (
-                    agent_type.replace("_", " ").title() if agent_type else "AI Teacher"
-                )
-                print(f"\n✅ Question sent to {teacher_type}!")
-                print(f"📝 Question: {question}")
-                print(f"🆔 Request ID: {request_id}")
-                print(f"� Via Client: {available_client.student_name}")
+                # Check if this is a duplicate request display
+                with self._output_lock:
+                    if self._last_request_id == request_id:
+                        # Skip duplicate display
+                        teacher_type = (
+                            agent_type.replace("_", " ").title() if agent_type else "AI Teacher"
+                        )
+                        print(f"\n⚡ Duplicate request detected, skipping display for {request_id}")
+                    else:
+                        self._last_request_id = request_id
+                        teacher_type = (
+                            agent_type.replace("_", " ").title() if agent_type else "AI Teacher"
+                        )
+                        print(f"\n✅ Question sent to {teacher_type}!")
+                        print(f"📝 Question: {question}")
+                        print(f"🆔 Request ID: {request_id}")
+                        print(f"� Via Client: {available_client.student_name}")
 
-                # Wait for response from the actual agent
-                print(f"\n⏳ Waiting for response from {teacher_type}...")
+                        # Wait for response from the actual agent
+                        print(f"\n⏳ Waiting for response from {teacher_type}...")
 
                 # Wait for the actual response with detailed information
                 response = available_client.producer.wait_for_response(
@@ -741,11 +761,12 @@ Question: {question}"""
 
         """
         # Display the actual response
-        print(f"\n💬 Response from {teacher_type}:")
-        response_text = response.get("response", "No response text")
+        with self._output_lock:
+            print(f"\n💬 Response from {teacher_type}:")
+            response_text = response.get("response", "No response text")
 
-        # Display full response text (no truncation)
-        print(f"   📖 Answer: {response_text}")
+            # Display full response text (no truncation)
+            print(f"   📖 Answer: {response_text}")
 
         # If response is very long, add a separator
         if len(response_text) > 500:
@@ -783,7 +804,54 @@ Question: {question}"""
         print(f"   ⚡ Agent Response Time: {response_time:.2f}s")
         print(f"   ⏱️  Total Elapsed Time: {elapsed_time:.2f}s")
 
-        if cost_info:
+        # Try to get cost information from cost monitor for the request
+        request_id = response.get("request_id")
+        cost_found = False
+        
+        if request_id:
+            try:
+                # Import cost monitor to get recent cost data
+                from src.monitoring.cost_monitor import cost_monitor
+                
+                # Look for cost records from the last few seconds that match this request
+                recent_cutoff = time.time() - 10  # Last 10 seconds
+                matching_requests = [
+                    r for r in cost_monitor.requests 
+                    if r.timestamp >= recent_cutoff and r.request_id == request_id
+                ]
+                
+                if matching_requests:
+                    # Get the most recent matching request
+                    cost_record = matching_requests[-1]
+                    
+                    input_tokens = cost_record.input_tokens
+                    output_tokens = cost_record.output_tokens
+                    total_tokens = cost_record.total_tokens
+                    total_cost = cost_record.total_cost
+                    model_name = cost_record.model_name
+
+                    print(f"   🔢 Input Tokens: {input_tokens}")
+                    print(f"   📝 Output Tokens: {output_tokens}")
+                    print(f"   🎯 Total Tokens: {total_tokens}")
+                    print(f"   💰 Total Cost: ${total_cost:.6f}")
+                    print(f"   🤖 Model: {model_name}")
+
+                    if response_time > 0 and total_tokens > 0:
+                        tokens_per_second = total_tokens / response_time
+                        print(f"   🚀 Tokens/s: {tokens_per_second:.2f}")
+
+                    if total_tokens > 0:
+                        cost_per_token = total_cost / total_tokens
+                        print(f"   💎 Cost/Token: ${cost_per_token:.8f}")
+
+                    print("   ✅ Real token tracking successful!")
+                    cost_found = True
+                    
+            except Exception as e:
+                logger.debug(f"Could not get cost info from cost monitor: {e}")
+        
+        # Fallback to response cost_info if available (backward compatibility)
+        if not cost_found and cost_info:
             input_tokens = cost_info.get("input_tokens", 0)
             output_tokens = cost_info.get("output_tokens", 0)
             total_tokens = cost_info.get("total_tokens", input_tokens + output_tokens)
@@ -805,8 +873,12 @@ Question: {question}"""
                 print(f"   💎 Cost/Token: ${cost_per_token:.8f}")
 
             print("   ✅ Real token tracking successful!")
-        else:
-            print("   ⚠️  No cost information in response")
+            cost_found = True
+        
+        # If still no cost info found, show message
+        if not cost_found:
+            print("   ⚠️  Cost information not yet available (processing via Kafka)")
+            print("   ℹ️  Token data is being processed by cost monitor")
 
         # Show tools count
         tools_count = performance_metrics.get("tools_count", len(tools_used))

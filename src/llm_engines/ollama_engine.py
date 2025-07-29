@@ -133,12 +133,13 @@ class OllamaEngine(BaseLLMEngine):
         except Exception as e:
             logger.error(f"Error pulling model: {e}")
 
-    def generate_response(self, prompt: str, **kwargs) -> str:
+    def generate_response(self, prompt: str, user_id: str = "anonymous", **kwargs) -> str:
         """
-        Generate response using Ollama with cost tracking.
+        Generate response using Ollama.
 
         Args:
             prompt (str): Input prompt.
+            user_id (str): User identifier for cost tracking.
             **kwargs: Additional generation parameters.
 
         Returns:
@@ -149,6 +150,9 @@ class OllamaEngine(BaseLLMEngine):
                 An error occurred while generating response.
         """
         start_time = time.time()
+        request_id = kwargs.get("request_id", f"ollama_{int(start_time)}")
+        agent_uuid = kwargs.get("agent_uuid", "")
+        agent_type = kwargs.get("agent_type", "")
 
         try:
             # Extract parameters
@@ -179,7 +183,7 @@ class OllamaEngine(BaseLLMEngine):
             generated_text = response_data.get("response", "")
 
             # Calculate token usage (estimation based on character count)
-            request_cost = self._calculate_request_cost(prompt, generated_text)
+            input_tokens, output_tokens = self._estimate_token_usage(prompt, generated_text)
 
             # Update tracking
             self.total_requests += 1
@@ -187,11 +191,23 @@ class OllamaEngine(BaseLLMEngine):
             end_time = time.time()
             response_time = end_time - start_time
 
+            # Send token usage to cost monitor
+            self._send_token_usage_to_cost_monitor(
+                request_id=request_id,
+                user_id=user_id,
+                agent_uuid=agent_uuid,
+                agent_type=agent_type,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                response_time=response_time,
+                success=True
+            )
+
             # Log usage information
             logger.info(
                 f"Ollama request completed: "
-                f"Input tokens: {request_cost['input_tokens']}, "
-                f"Output tokens: {request_cost['output_tokens']}, "
+                f"Input tokens: {input_tokens}, "
+                f"Output tokens: {output_tokens}, "
                 f"Response time: {response_time:.2f}s"
             )
 
@@ -199,18 +215,30 @@ class OllamaEngine(BaseLLMEngine):
                 logger.debug(f"Generated response: {generated_text[:100]}...")
                 return generated_text
             else:
-                logger.warning("Empty response from Ollama")
-                return ""
+                raise Exception("Empty response from Ollama")
 
-        except requests.RequestException as e:
-            logger.error(f"Network error with Ollama: {e}")
-            return f"Error: Network issue connecting to Ollama - {str(e)}"
         except Exception as e:
-            logger.error(f"Error generating response with Ollama: {e}")
-            return f"Error: Failed to generate response - {str(e)}"
+            end_time = time.time()
+            response_time = end_time - start_time
+            
+            # Send failed request info to cost monitor
+            self._send_token_usage_to_cost_monitor(
+                request_id=request_id,
+                user_id=user_id,
+                agent_uuid=agent_uuid,
+                agent_type=agent_type,
+                input_tokens=0,
+                output_tokens=0,
+                response_time=response_time,
+                success=False,
+                error_message=str(e)
+            )
+            
+            logger.error(f"Ollama generation failed: {e}")
+            raise
 
     def generate_with_tools(
-        self, prompt: str, tools: List[Dict[str, Any]], **kwargs
+        self, prompt: str, tools: List[Dict[str, Any]], user_id: str = "anonymous", **kwargs
     ) -> str:
         """
         Generate response with tool calling capability
@@ -219,6 +247,7 @@ class OllamaEngine(BaseLLMEngine):
         Args:
             prompt: Input prompt
             tools: List of available tools
+            user_id: User identifier for cost tracking
             **kwargs: Additional parameters
 
         Returns:
@@ -236,11 +265,11 @@ User request: {prompt}
 
 Please provide a helpful response. If you need to use any tools, mention which tool you would use and why, but focus on providing a direct answer to the user's question."""
 
-            return self.generate_response(enhanced_prompt, **kwargs)
+            return self.generate_response(enhanced_prompt, user_id=user_id, **kwargs)
 
         except Exception as e:
             logger.error(f"Error generating response with tools: {e}")
-            return f"Error: Failed to generate response with tools - {str(e)}"
+            raise
 
     def _format_tools_for_prompt(self, tools: List[Dict[str, Any]]) -> str:
         """
@@ -430,6 +459,26 @@ Please provide a helpful response. If you need to use any tools, mention which t
         except Exception as e:
             logger.error(f"Error getting available models: {e}")
             return []
+
+    def _estimate_token_usage(self, prompt: str, response: str) -> tuple:
+        """
+        Estimate token usage for prompt and response.
+        
+        Args:
+            prompt: Input prompt
+            response: Generated response
+            
+        Returns:
+            Tuple of (input_tokens, output_tokens)
+        """
+        # Rough approximation: 1 token ≈ 4 characters for English text
+        input_tokens = max(len(prompt) // 4, 1)
+        output_tokens = max(len(response) // 4, 1)
+        return input_tokens, output_tokens
+
+    def _get_provider_name(self) -> str:
+        """Get the provider name for this engine."""
+        return "ollama"
 
     def get_model_info(self) -> Dict[str, Any]:
         """
